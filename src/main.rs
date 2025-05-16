@@ -155,11 +155,11 @@ impl App for CBZViewerApp {
                     let view_size = response.rect.size();
                     let mut offset = self.pan_offset;
 
-                    // Enforce bounds to keep image at least partially visible
-                    let max_x = ((disp_size.x - view_size.x) / 2.0).max(0.0);
-                    let max_y = ((disp_size.y - view_size.y) / 2.0).max(0.0);
-                    offset.x = offset.x.clamp(-max_x, max_x);
-                    offset.y = offset.y.clamp(-max_y, max_y);
+                    // Improved pan clamping to ensure image remains partially visible
+                    let bound_x = ((disp_size.x + view_size.x) / 2.0).max(1.0);
+                    let bound_y = ((disp_size.y + view_size.y) / 2.0).max(1.0);
+                    offset.x = offset.x.clamp(-bound_x, bound_x);
+                    offset.y = offset.y.clamp(-bound_y, bound_y);
                     self.pan_offset = offset;
 
                     let rect = Rect::from_center_size(center + offset, disp_size);
@@ -194,6 +194,6 @@ fn main() {
         resizable: true,
         ..Default::default()
     };
-    eframe::run_native("CBZ Viewer", opts, Box::new(|_| Box::new(app)));
+    let _ = eframe::run_native("CBZ Viewer", opts, Box::new(|_| Box::new(app)));
 }
 
