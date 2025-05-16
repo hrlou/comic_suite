@@ -1,17 +1,8 @@
+use std::{fs::File, io::Read, path::PathBuf, sync::{Arc, Mutex}, thread};
 use std::time::Duration;
-use std::{
-    fs::File,
-    io::Read,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    thread,
-};
 
-use eframe::egui::{
-    Align, ColorImage, Direction, Layout, ProgressBar, ScrollArea, TextureFilter, TextureOptions,
-    Vec2,
-};
 use eframe::{egui, App, NativeOptions};
+use eframe::egui::{ColorImage, TextureFilter, TextureOptions, Vec2, ProgressBar, Layout, Align, Rect, pos2, Image};
 use image::{DynamicImage, GenericImageView};
 use zip::ZipArchive;
 
@@ -27,6 +18,8 @@ struct CBZViewerApp {
     progress: Arc<Mutex<f32>>,
     loading_thread: Option<thread::JoinHandle<()>>,
     zoom: f32,
+    pan_offset: Vec2,
+    drag_start: Option<egui::Pos2>,
 }
 
 impl CBZViewerApp {
@@ -38,13 +31,7 @@ impl CBZViewerApp {
             if let Ok(file) = archive.by_index(i) {
                 let name = file.name().to_string();
                 let lower = name.to_lowercase();
-                if lower.ends_with(".jpg")
-                    || lower.ends_with(".jpeg")
-                    || lower.ends_with(".png")
-                    || lower.ends_with(".bmp")
-                    || lower.ends_with(".gif")
-                    || lower.ends_with(".webp")
-                {
+                if [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"].iter().any(|ext| lower.ends_with(ext)) {
                     names.push(name);
                 }
             }
@@ -59,6 +46,8 @@ impl CBZViewerApp {
             progress: Arc::new(Mutex::new(0.0)),
             loading_thread: None,
             zoom: 1.0,
+            pan_offset: Vec2::ZERO,
+            drag_start: None,
         }
     }
 
@@ -81,9 +70,7 @@ impl CBZViewerApp {
             let mut total = 0u64;
             let mut tmp = [0u8; 8192];
             while let Ok(n) = file.read(&mut tmp) {
-                if n == 0 {
-                    break;
-                }
+                if n == 0 { break; }
                 buf.extend_from_slice(&tmp[..n]);
                 total += n as u64;
                 *progress.lock().unwrap() = (total as f32 / size as f32).min(1.0);
@@ -101,70 +88,87 @@ impl App for CBZViewerApp {
             self.load_image_async(self.current_page);
         }
         let input = ctx.input(|i| i.clone());
-        if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < self.filenames.len()
-        {
+        if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < self.filenames.len() {
             self.current_page += 1;
-            // keep zoom persistent
             self.load_image_async(self.current_page);
         }
         if input.key_pressed(egui::Key::ArrowLeft) && self.current_page > 0 {
             self.current_page -= 1;
             self.load_image_async(self.current_page);
         }
-        if input.scroll_delta.y != 0.0 {
+        if input.scroll_delta.y.abs() > 0.0 {
             self.zoom *= (1.0 + input.scroll_delta.y * 0.01).clamp(0.1, 10.0);
         }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(&self.filenames[self.current_page]);
-                ui.label(format!(
-                    "({}/{})",
-                    self.current_page + 1,
-                    self.filenames.len()
-                ));
+                ui.label(format!("({}/{})", self.current_page + 1, self.filenames.len()));
             });
             ui.add_space(8.0);
-            ScrollArea::both().auto_shrink([false; 2]).show(ui, |ui| {
-                if let Some(img) = &*self.image_cache.lock().unwrap() {
-                    let (w, h) = img.dimensions();
-                    let disp_size = Vec2::new(w as f32 * self.zoom, h as f32 * self.zoom);
-                    // lock texture cache
-                    let mut cache = self.texture_cache.lock().unwrap();
-                    if cache.as_ref().map(|(p, _)| *p) != Some(self.current_page) {
-                        let color_img = ColorImage::from_rgba_unmultiplied(
-                            [w as usize, h as usize],
-                            &img.to_rgba8(),
-                        );
-                        let handle = ui.ctx().load_texture(
-                            format!("tex{}", self.current_page),
-                            color_img,
-                            TextureOptions {
-                                magnification: TextureFilter::Linear,
-                                minification: TextureFilter::Linear,
-                                ..Default::default()
-                            },
-                        );
-                        *cache = Some((self.current_page, handle));
+
+            let show_progress = self.texture_cache.lock().unwrap().is_none();
+
+            let response = ui.allocate_response(ui.available_size(), egui::Sense::drag());
+
+            if response.drag_started() {
+                self.drag_start = response.interact_pointer_pos();
+            }
+
+            if response.dragged() {
+                if let Some(pos) = response.interact_pointer_pos() {
+                    if let Some(start) = self.drag_start {
+                        let delta = pos - start;
+                        self.pan_offset += delta;
+                        self.drag_start = Some(pos);
                     }
-                    // center image
-                    ui.with_layout(
-                        Layout::centered_and_justified(Direction::LeftToRight),
-                        |ui| {
-                            if let Some((_, handle)) = &*cache {
-                                ui.add(egui::Image::new((handle.id(), disp_size)));
-                            }
+                }
+            }
+
+            if response.drag_released() {
+                self.drag_start = None;
+            }
+
+            if let Some(img) = &*self.image_cache.lock().unwrap() {
+                let (w, h) = img.dimensions();
+                let disp_size = Vec2::new(w as f32 * self.zoom, h as f32 * self.zoom);
+                let mut cache = self.texture_cache.lock().unwrap();
+                if cache.as_ref().map(|(p, _)| *p) != Some(self.current_page) {
+                    let color_img = ColorImage::from_rgba_unmultiplied(
+                        [w as usize, h as usize],
+                        &img.to_rgba8(),
+                    );
+                    let handle = ui.ctx().load_texture(
+                        format!("tex{}", self.current_page),
+                        color_img,
+                        TextureOptions {
+                            magnification: TextureFilter::Linear,
+                            minification: TextureFilter::Linear,
+                            ..Default::default()
                         },
                     );
+                    *cache = Some((self.current_page, handle));
                 }
-            });
-            ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
+
+                if let Some((_, handle)) = &*cache {
+                    let center = response.rect.center();
+                    let rect = Rect::from_center_size(center + self.pan_offset, disp_size);
+                    ui.allocate_ui_at_rect(rect, |ui| {
+                        ui.add(Image::from_texture(handle).fit_to_exact_size(disp_size));
+                    });
+                }
+            }
+
+            if show_progress {
                 let prog = *self.progress.lock().unwrap();
-                ui.add(
-                    ProgressBar::new(prog)
-                        .desired_width(ui.available_width() * 0.8)
-                        .show_percentage(),
-                );
-            });
+                ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
+                    ui.add(
+                        ProgressBar::new(prog)
+                            .desired_width(ui.available_width() * 0.8)
+                            .show_percentage(),
+                    );
+                });
+            }
         });
         ctx.request_repaint_after(Duration::from_millis(16));
     }
@@ -182,3 +186,4 @@ fn main() {
     };
     eframe::run_native("CBZ Viewer", opts, Box::new(|_| Box::new(app)));
 }
+
