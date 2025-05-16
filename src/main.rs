@@ -152,7 +152,17 @@ impl App for CBZViewerApp {
 
                 if let Some((_, handle)) = &*cache {
                     let center = response.rect.center();
-                    let rect = Rect::from_center_size(center + self.pan_offset, disp_size);
+                    let view_size = response.rect.size();
+                    let mut offset = self.pan_offset;
+
+                    // Enforce bounds to keep image at least partially visible
+                    let max_x = ((disp_size.x - view_size.x) / 2.0).max(0.0);
+                    let max_y = ((disp_size.y - view_size.y) / 2.0).max(0.0);
+                    offset.x = offset.x.clamp(-max_x, max_x);
+                    offset.y = offset.y.clamp(-max_y, max_y);
+                    self.pan_offset = offset;
+
+                    let rect = Rect::from_center_size(center + offset, disp_size);
                     ui.allocate_ui_at_rect(rect, |ui| {
                         ui.add(Image::from_texture(handle).fit_to_exact_size(disp_size));
                     });
