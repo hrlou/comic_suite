@@ -1,8 +1,17 @@
-use std::{fs::File, io::Read, path::PathBuf, sync::{Arc, Mutex}, thread};
 use std::time::Duration;
+use std::{
+    fs::File,
+    io::Read,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+};
 
+use eframe::egui::{
+    Align, ColorImage, Direction, Layout, ProgressBar, ScrollArea, TextureFilter, TextureOptions,
+    Vec2,
+};
 use eframe::{egui, App, NativeOptions};
-use eframe::egui::{ColorImage, TextureFilter, TextureOptions, Vec2, ScrollArea, ProgressBar, Layout, Direction, Align};
 use image::{DynamicImage, GenericImageView};
 use zip::ZipArchive;
 
@@ -29,9 +38,12 @@ impl CBZViewerApp {
             if let Ok(file) = archive.by_index(i) {
                 let name = file.name().to_string();
                 let lower = name.to_lowercase();
-                if lower.ends_with(".jpg") || lower.ends_with(".jpeg")
-                    || lower.ends_with(".png") || lower.ends_with(".bmp")
-                    || lower.ends_with(".gif") || lower.ends_with(".webp")
+                if lower.ends_with(".jpg")
+                    || lower.ends_with(".jpeg")
+                    || lower.ends_with(".png")
+                    || lower.ends_with(".bmp")
+                    || lower.ends_with(".gif")
+                    || lower.ends_with(".webp")
                 {
                     names.push(name);
                 }
@@ -69,7 +81,9 @@ impl CBZViewerApp {
             let mut total = 0u64;
             let mut tmp = [0u8; 8192];
             while let Ok(n) = file.read(&mut tmp) {
-                if n == 0 { break; }
+                if n == 0 {
+                    break;
+                }
                 buf.extend_from_slice(&tmp[..n]);
                 total += n as u64;
                 *progress.lock().unwrap() = (total as f32 / size as f32).min(1.0);
@@ -87,7 +101,8 @@ impl App for CBZViewerApp {
             self.load_image_async(self.current_page);
         }
         let input = ctx.input(|i| i.clone());
-        if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < self.filenames.len() {
+        if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < self.filenames.len()
+        {
             self.current_page += 1;
             // keep zoom persistent
             self.load_image_async(self.current_page);
@@ -102,7 +117,11 @@ impl App for CBZViewerApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(&self.filenames[self.current_page]);
-                ui.label(format!("({}/{})", self.current_page + 1, self.filenames.len()));
+                ui.label(format!(
+                    "({}/{})",
+                    self.current_page + 1,
+                    self.filenames.len()
+                ));
             });
             ui.add_space(8.0);
             ScrollArea::both().auto_shrink([false; 2]).show(ui, |ui| {
@@ -113,26 +132,38 @@ impl App for CBZViewerApp {
                     let mut cache = self.texture_cache.lock().unwrap();
                     if cache.as_ref().map(|(p, _)| *p) != Some(self.current_page) {
                         let color_img = ColorImage::from_rgba_unmultiplied(
-                            [w as usize, h as usize], &img.to_rgba8(),
+                            [w as usize, h as usize],
+                            &img.to_rgba8(),
                         );
                         let handle = ui.ctx().load_texture(
                             format!("tex{}", self.current_page),
                             color_img,
-                            TextureOptions { magnification: TextureFilter::Linear, minification: TextureFilter::Linear, ..Default::default() },
+                            TextureOptions {
+                                magnification: TextureFilter::Linear,
+                                minification: TextureFilter::Linear,
+                                ..Default::default()
+                            },
                         );
                         *cache = Some((self.current_page, handle));
                     }
                     // center image
-                    ui.with_layout(Layout::centered_and_justified(Direction::LeftToRight), |ui| {
-                        if let Some((_, handle)) = &*cache {
-                            ui.add(egui::Image::new((handle.id(), disp_size)));  
-                        }
-                    });
+                    ui.with_layout(
+                        Layout::centered_and_justified(Direction::LeftToRight),
+                        |ui| {
+                            if let Some((_, handle)) = &*cache {
+                                ui.add(egui::Image::new((handle.id(), disp_size)));
+                            }
+                        },
+                    );
                 }
             });
             ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
                 let prog = *self.progress.lock().unwrap();
-                ui.add(ProgressBar::new(prog).desired_width(ui.available_width() * 0.8).show_percentage());
+                ui.add(
+                    ProgressBar::new(prog)
+                        .desired_width(ui.available_width() * 0.8)
+                        .show_percentage(),
+                );
             });
         });
         ctx.request_repaint_after(Duration::from_millis(16));
@@ -140,8 +171,14 @@ impl App for CBZViewerApp {
 }
 
 fn main() {
-    let zip_path = std::env::args().nth(1).expect("Usage: cbz_viewer <file.cbz>");
+    let zip_path = std::env::args()
+        .nth(1)
+        .expect("Usage: cbz_viewer <file.cbz>");
     let app = CBZViewerApp::new(PathBuf::from(zip_path));
-    let opts = NativeOptions { initial_window_size: Some(Vec2::new(WIN_WIDTH, WIN_HEIGHT)), resizable: true, ..Default::default() };
+    let opts = NativeOptions {
+        initial_window_size: Some(Vec2::new(WIN_WIDTH, WIN_HEIGHT)),
+        resizable: true,
+        ..Default::default()
+    };
     eframe::run_native("CBZ Viewer", opts, Box::new(|_| Box::new(app)));
 }
