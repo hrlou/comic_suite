@@ -184,16 +184,45 @@ impl App for CBZViewerApp {
     }
 }
 
-fn main() {
-    let zip_path = std::env::args()
-        .nth(1)
-        .expect("Usage: cbz_viewer <file.cbz>");
-    let app = CBZViewerApp::new(PathBuf::from(zip_path));
+fn pick_comic() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter("CBZ or ZIP files", &["cbz", "zip"])
+        .set_title("Select a CBZ or ZIP file")
+        .pick_file()
+}
+
+fn initialise(path: PathBuf) {
+    let app = CBZViewerApp::new(path);
     let opts = NativeOptions {
         initial_window_size: Some(Vec2::new(WIN_WIDTH, WIN_HEIGHT)),
         resizable: true,
         ..Default::default()
     };
     let _ = eframe::run_native("CBZ Viewer", opts, Box::new(|_| Box::new(app)));
+}
+
+fn main() {
+    // let zip_path = std::env::args()
+    //    .nth(1)
+    //    .expect("Usage: cbz_viewer <file.cbz>");
+    let path = std::env::args()
+       .nth(1);
+
+    match path {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            initialise(path);
+        }
+        None => {
+            match pick_comic() {
+                Some(path) => initialise(path),
+                None => {
+                    println!("Exiting!");
+                    thread::sleep(Duration::from_secs(3));
+                }
+            }
+        }
+    }
+
 }
 

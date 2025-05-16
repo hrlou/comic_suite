@@ -9,3 +9,4 @@ egui_extras = "0.23"
 image = "0.24"
 zip = "0.6"
 winapi = { version = "0.3.9", features = ["winuser", "windef"] }
+rfd = "0.9"
