@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use std::{fs::File, io::Read, path::PathBuf, sync::{Arc, Mutex}, thread};
 use std::time::Duration;
 
@@ -198,13 +199,10 @@ fn initialise(path: PathBuf) {
         resizable: true,
         ..Default::default()
     };
-    let _ = eframe::run_native("CBZ Viewer", opts, Box::new(|_| Box::new(app)));
+    let _ = eframe::run_native("CBZ Viewer: Louisana Crawdaddy Edition", opts, Box::new(|_| Box::new(app)));
 }
 
 fn main() {
-    // let zip_path = std::env::args()
-    //    .nth(1)
-    //    .expect("Usage: cbz_viewer <file.cbz>");
     let path = std::env::args()
        .nth(1);
 

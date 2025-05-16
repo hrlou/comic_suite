@@ -10,3 +10,21 @@ image = "0.24"
 zip = "0.6"
 winapi = { version = "0.3.9", features = ["winuser", "windef"] }
 rfd = "0.9"
+
+[build-dependencies]
+winres = "0.1"
+embed-resource = "2.4"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+[[bin]]
+name = "cbz_viewer"
+path = "src/main.rs"
+
+[features]
+default = []
+windows_gui = []
