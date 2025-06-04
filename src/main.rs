@@ -1,6 +1,7 @@
 // Hide the console window on Windows
 #![windows_subsystem = "windows"]
 
+use std::num::NonZeroUsize;
 use std::time::Duration;
 use std::{
     fs::File,
@@ -14,6 +15,7 @@ use eframe::egui::{
     pos2, Align, ColorImage, Image, Layout, ProgressBar, Rect, TextureFilter, TextureOptions, Vec2,
 };
 use eframe::{egui, App, NativeOptions};
+use lru::LruCache;
 use image::{DynamicImage, GenericImageView};
 use zip::ZipArchive;
 
@@ -24,6 +26,7 @@ const WIN_HEIGHT: f32 = 720.0;
 // Main application state
 struct CBZViewerApp {
     zip_path: PathBuf,                             // Path to the CBZ/ZIP archive
+    image_lru: Arc<Mutex<LruCache<usize, DynamicImage>>>, // Image cache for recently used images 
     filenames: Vec<String>,                        // List of image filenames in the archive
     current_page: usize,                           // Index of currently displayed image
     image_cache: Arc<Mutex<Option<DynamicImage>>>, // Shared cache for decoded image
@@ -63,6 +66,7 @@ impl CBZViewerApp {
         Self {
             zip_path,
             filenames: names,
+            image_lru: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(8).unwrap()))), // Cache for 8 images
             current_page: 0,
             image_cache: Arc::new(Mutex::new(None)),
             texture_cache: Arc::new(Mutex::new(None)),
@@ -81,8 +85,15 @@ impl CBZViewerApp {
         *self.texture_cache.lock().unwrap() = None;
 
         // Join any previous loading thread
-        if let Some(handle) = self.loading_thread.take() {
-            handle.join().ok();
+        // if let Some(handle) = self.loading_thread.take() {
+        //     handle.join().ok();
+        // }
+
+        // Check LRU cache first
+        if let Some(img) = self.image_lru.lock().unwrap().get(&page).cloned() {
+            *self.image_cache.lock().unwrap() = Some(img);
+            *self.progress.lock().unwrap() = 1.0;
+            return;
         }
 
         // Setup for new thread
@@ -90,6 +101,7 @@ impl CBZViewerApp {
         let zip_path = self.zip_path.clone();
         let image_cache = Arc::clone(&self.image_cache);
         let progress = Arc::clone(&self.progress);
+        let image_lru = Arc::clone(&self.image_lru);
 
         *progress.lock().unwrap() = 0.0;
         *image_cache.lock().unwrap() = None;
@@ -115,9 +127,13 @@ impl CBZViewerApp {
             }
 
             // Decode image
+            // let img = image::load_from_memory(&buf).unwrap();
+            // *image_cache.lock().unwrap() = Some(img);
+            // *progress.lock().unwrap() = 1.0;
             let img = image::load_from_memory(&buf).unwrap();
-            *image_cache.lock().unwrap() = Some(img);
+            *image_cache.lock().unwrap() = Some(img.clone());
             *progress.lock().unwrap() = 1.0;
+            image_lru.lock().unwrap().put(page, img); // Cache the image
         }));
     }
 }
