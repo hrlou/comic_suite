@@ -1,43 +1,65 @@
+// Hide the console window on Windows
 #![windows_subsystem = "windows"]
-use std::{fs::File, io::Read, path::PathBuf, sync::{Arc, Mutex}, thread};
-use std::time::Duration;
 
+use std::time::Duration;
+use std::{
+    fs::File,
+    io::Read,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+};
+
+use eframe::egui::{
+    pos2, Align, ColorImage, Image, Layout, ProgressBar, Rect, TextureFilter, TextureOptions, Vec2,
+};
 use eframe::{egui, App, NativeOptions};
-use eframe::egui::{ColorImage, TextureFilter, TextureOptions, Vec2, ProgressBar, Layout, Align, Rect, pos2, Image};
 use image::{DynamicImage, GenericImageView};
 use zip::ZipArchive;
 
+// Constants for initial window size
 const WIN_WIDTH: f32 = 1280.0;
 const WIN_HEIGHT: f32 = 720.0;
 
+// Main application state
 struct CBZViewerApp {
-    zip_path: PathBuf,
-    filenames: Vec<String>,
-    current_page: usize,
-    image_cache: Arc<Mutex<Option<DynamicImage>>>,
-    texture_cache: Arc<Mutex<Option<(usize, egui::TextureHandle)>>>,
-    progress: Arc<Mutex<f32>>,
-    loading_thread: Option<thread::JoinHandle<()>>,
-    zoom: f32,
-    pan_offset: Vec2,
-    drag_start: Option<egui::Pos2>,
+    zip_path: PathBuf,                             // Path to the CBZ/ZIP archive
+    filenames: Vec<String>,                        // List of image filenames in the archive
+    current_page: usize,                           // Index of currently displayed image
+    image_cache: Arc<Mutex<Option<DynamicImage>>>, // Shared cache for decoded image
+    texture_cache: Arc<Mutex<Option<(usize, egui::TextureHandle)>>>, // Shared cache for GPU texture
+    progress: Arc<Mutex<f32>>,                     // Shared loading progress
+    loading_thread: Option<thread::JoinHandle<()>>, // Background thread handle for image loading
+    zoom: f32,                                     // Current zoom level
+    pan_offset: Vec2,                              // Pan offset for dragging
+    window_size: Vec2,                             // Current window size, for calculating default zoom
+    drag_start: Option<egui::Pos2>,                // Start position of drag
+    has_initialised_zoom: bool,
 }
 
 impl CBZViewerApp {
+    /// Create a new viewer from a CBZ file path
     fn new(zip_path: PathBuf) -> Self {
         let file = File::open(&zip_path).expect("Failed to open CBZ file");
         let mut archive = ZipArchive::new(file).expect("Failed to read zip");
+
+        // Filter image files
         let mut names = Vec::new();
         for i in 0..archive.len() {
             if let Ok(file) = archive.by_index(i) {
                 let name = file.name().to_string();
                 let lower = name.to_lowercase();
-                if [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"].iter().any(|ext| lower.ends_with(ext)) {
+                if [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"]
+                    .iter()
+                    .any(|ext| lower.ends_with(ext))
+                {
                     names.push(name);
                 }
             }
         }
+        // Sort image files alphabetically
         names.sort_by_key(|n| n.to_lowercase());
+
         Self {
             zip_path,
             filenames: names,
@@ -48,34 +70,51 @@ impl CBZViewerApp {
             loading_thread: None,
             zoom: 1.0,
             pan_offset: Vec2::ZERO,
+            window_size: Vec2::ZERO,
             drag_start: None,
+            has_initialised_zoom: false,
         }
     }
 
+    /// Spawn background thread to load and decode image
     fn load_image_async(&mut self, page: usize) {
         *self.texture_cache.lock().unwrap() = None;
+
+        // Join any previous loading thread
         if let Some(handle) = self.loading_thread.take() {
             handle.join().ok();
         }
+
+        // Setup for new thread
         let filenames = self.filenames.clone();
         let zip_path = self.zip_path.clone();
         let image_cache = Arc::clone(&self.image_cache);
         let progress = Arc::clone(&self.progress);
+
         *progress.lock().unwrap() = 0.0;
         *image_cache.lock().unwrap() = None;
+
+        // Spawn thread to load and decode the image
         self.loading_thread = Some(thread::spawn(move || {
             let mut archive = ZipArchive::new(File::open(&zip_path).unwrap()).unwrap();
             let mut file = archive.by_name(&filenames[page]).unwrap();
             let size = file.size();
+
             let mut buf = Vec::with_capacity(size as usize);
             let mut total = 0u64;
             let mut tmp = [0u8; 8192];
+
+            // Read file in chunks while updating progress
             while let Ok(n) = file.read(&mut tmp) {
-                if n == 0 { break; }
+                if n == 0 {
+                    break;
+                }
                 buf.extend_from_slice(&tmp[..n]);
                 total += n as u64;
                 *progress.lock().unwrap() = (total as f32 / size as f32).min(1.0);
             }
+
+            // Decode image
             let img = image::load_from_memory(&buf).unwrap();
             *image_cache.lock().unwrap() = Some(img);
             *progress.lock().unwrap() = 1.0;
@@ -84,12 +123,19 @@ impl CBZViewerApp {
 }
 
 impl App for CBZViewerApp {
+    /// Main UI update loop
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Load current image if not already loading
         if self.loading_thread.is_none() {
             self.load_image_async(self.current_page);
         }
+
         let input = ctx.input(|i| i.clone());
-        if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < self.filenames.len() {
+        self.window_size = ctx.screen_rect().size();
+
+        // Handle arrow key navigation
+        if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < self.filenames.len()
+        {
             self.current_page += 1;
             self.load_image_async(self.current_page);
         }
@@ -97,19 +143,39 @@ impl App for CBZViewerApp {
             self.current_page -= 1;
             self.load_image_async(self.current_page);
         }
+
+        if !self.has_initialised_zoom {
+            if let Some(img) = &*self.image_cache.lock().unwrap() {
+                let (img_w, img_h) = img.dimensions();
+                let zoom_x = self.window_size.x / img_w as f32;
+                let zoom_y = self.window_size.y / img_h as f32;
+                self.zoom = zoom_x.min(zoom_y).min(1.0); // Cap if desired
+                self.pan_offset = Vec2::ZERO;
+                self.has_initialised_zoom = true;
+            }
+        }
+
+        // Zoom with scroll wheel
         if input.scroll_delta.y.abs() > 0.0 {
             self.zoom *= (1.0 + input.scroll_delta.y * 0.01).clamp(0.1, 10.0);
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Display filename and page number
             ui.horizontal(|ui| {
                 ui.label(&self.filenames[self.current_page]);
-                ui.label(format!("({}/{})", self.current_page + 1, self.filenames.len()));
+                ui.label(format!(
+                    "({}/{})",
+                    self.current_page + 1,
+                    self.filenames.len()
+                ));
             });
             ui.add_space(8.0);
 
+            // Track if we need to show a progress bar
             let show_progress = self.texture_cache.lock().unwrap().is_none();
 
+            // Detect and handle drag for panning
             let response = ui.allocate_response(ui.available_size(), egui::Sense::drag());
 
             if response.drag_started() {
@@ -130,10 +196,13 @@ impl App for CBZViewerApp {
                 self.drag_start = None;
             }
 
+            // Display loaded image if available
             if let Some(img) = &*self.image_cache.lock().unwrap() {
                 let (w, h) = img.dimensions();
                 let disp_size = Vec2::new(w as f32 * self.zoom, h as f32 * self.zoom);
+
                 let mut cache = self.texture_cache.lock().unwrap();
+                // If texture not cached for current page, upload to GPU
                 if cache.as_ref().map(|(p, _)| *p) != Some(self.current_page) {
                     let color_img = ColorImage::from_rgba_unmultiplied(
                         [w as usize, h as usize],
@@ -156,7 +225,7 @@ impl App for CBZViewerApp {
                     let view_size = response.rect.size();
                     let mut offset = self.pan_offset;
 
-                    // Improved pan clamping to ensure image remains partially visible
+                    // Clamp panning to keep image within view bounds
                     let bound_x = ((disp_size.x + view_size.x) / 2.0).max(1.0);
                     let bound_y = ((disp_size.y + view_size.y) / 2.0).max(1.0);
                     offset.x = offset.x.clamp(-bound_x, bound_x);
@@ -170,6 +239,7 @@ impl App for CBZViewerApp {
                 }
             }
 
+            // Show progress bar if image is still loading
             if show_progress {
                 let prog = *self.progress.lock().unwrap();
                 ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
@@ -181,10 +251,13 @@ impl App for CBZViewerApp {
                 });
             }
         });
+
+        // Schedule next frame repaint
         ctx.request_repaint_after(Duration::from_millis(16));
     }
 }
 
+/// Open file picker to select a CBZ or ZIP file
 fn pick_comic() -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter("CBZ or ZIP files", &["cbz", "zip"])
@@ -192,6 +265,7 @@ fn pick_comic() -> Option<PathBuf> {
         .pick_file()
 }
 
+/// Initialize the app and run it with eframe
 fn initialise(path: PathBuf) {
     let app = CBZViewerApp::new(path);
     let opts = NativeOptions {
@@ -199,28 +273,28 @@ fn initialise(path: PathBuf) {
         resizable: true,
         ..Default::default()
     };
-    let _ = eframe::run_native("CBZ Viewer: Louisana Crawdaddy Edition", opts, Box::new(|_| Box::new(app)));
+    let _ = eframe::run_native(
+        "CBZ Viewer",
+        opts,
+        Box::new(|_| Box::new(app)),
+    );
 }
 
+/// Entry point: load path from CLI or show file picker
 fn main() {
-    let path = std::env::args()
-       .nth(1);
+    let path = std::env::args().nth(1);
 
     match path {
         Some(path) => {
             let path = PathBuf::from(path);
             initialise(path);
         }
-        None => {
-            match pick_comic() {
-                Some(path) => initialise(path),
-                None => {
-                    println!("Exiting!");
-                    thread::sleep(Duration::from_secs(3));
-                }
+        None => match pick_comic() {
+            Some(path) => initialise(path),
+            None => {
+                println!("Exiting!");
+                thread::sleep(Duration::from_secs(3));
             }
-        }
+        },
     }
-
 }
-
