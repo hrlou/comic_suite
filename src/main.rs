@@ -20,8 +20,9 @@ use image::{DynamicImage, GenericImageView};
 use zip::ZipArchive;
 
 // Constants for initial window size
-const WIN_WIDTH: f32 = 1280.0;
-const WIN_HEIGHT: f32 = 720.0;
+const WIN_WIDTH: f32 = 720.0;
+const WIN_HEIGHT: f32 = 1080.0;
+const CACHE_SIZE: usize = 12; // Number of images to cache
 
 // Main application state
 struct CBZViewerApp {
@@ -66,7 +67,7 @@ impl CBZViewerApp {
         Self {
             zip_path,
             filenames: names,
-            image_lru: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(8).unwrap()))), // Cache for 8 images
+            image_lru: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(CACHE_SIZE).unwrap()))), // Cache for 8 images
             current_page: 0,
             image_cache: Arc::new(Mutex::new(None)),
             texture_cache: Arc::new(Mutex::new(None)),
@@ -79,15 +80,9 @@ impl CBZViewerApp {
             has_initialised_zoom: false,
         }
     }
-
     /// Spawn background thread to load and decode image
     fn load_image_async(&mut self, page: usize) {
         *self.texture_cache.lock().unwrap() = None;
-
-        // Join any previous loading thread
-        // if let Some(handle) = self.loading_thread.take() {
-        //     handle.join().ok();
-        // }
 
         // Check LRU cache first
         if let Some(img) = self.image_lru.lock().unwrap().get(&page).cloned() {
@@ -127,14 +122,67 @@ impl CBZViewerApp {
             }
 
             // Decode image
-            // let img = image::load_from_memory(&buf).unwrap();
-            // *image_cache.lock().unwrap() = Some(img);
-            // *progress.lock().unwrap() = 1.0;
             let img = image::load_from_memory(&buf).unwrap();
             *image_cache.lock().unwrap() = Some(img.clone());
             *progress.lock().unwrap() = 1.0;
             image_lru.lock().unwrap().put(page, img); // Cache the image
         }));
+
+        // --- Preload next and previous pages in the background ---
+        let filenames = self.filenames.clone();
+        let zip_path = self.zip_path.clone();
+        let image_lru = Arc::clone(&self.image_lru);
+
+        if page + 1 < self.filenames.len() {
+            let filenames = filenames.clone();
+            let zip_path = zip_path.clone();
+            let image_lru = Arc::clone(&image_lru);
+            let next_page = page + 1;
+            thread::spawn(move || {
+                if image_lru.lock().unwrap().get(&next_page).is_none() {
+                    let mut archive = ZipArchive::new(File::open(&zip_path).unwrap()).unwrap();
+                    {
+                        if let Ok(mut file) = archive.by_name(&filenames[next_page]) {
+                            let mut buf = Vec::with_capacity(file.size() as usize);
+                            let mut tmp = [0u8; 8192];
+                            while let Ok(n) = file.read(&mut tmp) {
+                                if n == 0 { break; }
+                                buf.extend_from_slice(&tmp[..n]);
+                            }
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                image_lru.lock().unwrap().put(next_page, img);
+                            }
+                        }
+                    }; // <-- file borrow ends here before archive is dropped
+                }
+            });
+        }
+
+        // Preload previous page
+        if page > 0 {
+            let filenames = filenames.clone();
+            let zip_path = zip_path.clone();
+            let image_lru = Arc::clone(&image_lru);
+            let prev_page = page - 1;
+            thread::spawn(move || {
+                if image_lru.lock().unwrap().get(&prev_page).is_none() {
+                    let mut archive = ZipArchive::new(File::open(&zip_path).unwrap()).unwrap();
+                    {
+                        if let Ok(mut file) = archive.by_name(&filenames[prev_page]) {
+                            let mut buf = Vec::with_capacity(file.size() as usize);
+                            let mut tmp = [0u8; 8192];
+                            while let Ok(n) = file.read(&mut tmp) {
+                                if n == 0 { break; }
+                                buf.extend_from_slice(&tmp[..n]);
+                            }
+                            if let Ok(img) = image::load_from_memory(&buf) {
+                                image_lru.lock().unwrap().put(prev_page, img);
+                            }
+                        }
+                    }; // <-- file borrow ends here before archive is dropped
+                }
+            });
+        }
     }
 }
 
