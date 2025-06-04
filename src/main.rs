@@ -144,6 +144,7 @@ impl App for CBZViewerApp {
             self.load_image_async(self.current_page);
         }
 
+        // Calculate initial zoom value from window size and image resoultion
         if !self.has_initialised_zoom {
             if let Some(img) = &*self.image_cache.lock().unwrap() {
                 let (img_w, img_h) = img.dimensions();
