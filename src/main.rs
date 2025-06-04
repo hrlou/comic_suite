@@ -39,6 +39,8 @@ struct CBZViewerApp {
     window_size: Vec2,                             // Current window size, for calculating default zoom
     drag_start: Option<egui::Pos2>,                // Start position of drag
     has_initialised_zoom: bool,
+    double_page_mode: bool,                        // Whether to show two pages side by side
+    right_to_left: bool,                           // Whether to read right to left (manga style)
 }
 
 impl CBZViewerApp {
@@ -78,6 +80,8 @@ impl CBZViewerApp {
             window_size: Vec2::ZERO,
             drag_start: None,
             has_initialised_zoom: false,
+            double_page_mode: false,
+            right_to_left: false,
         }
     }
     /// Spawn background thread to load and decode image
@@ -228,12 +232,29 @@ impl App for CBZViewerApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Display filename and page number
             ui.horizontal(|ui| {
-                ui.label(&self.filenames[self.current_page]);
-                ui.label(format!(
-                    "({}/{})",
-                    self.current_page + 1,
-                    self.filenames.len()
-                ));
+                // Single/Double page toggle
+                if ui.selectable_label(!self.double_page_mode, "Single Page").clicked() {
+                    self.double_page_mode = false;
+                }
+                if ui.selectable_label(self.double_page_mode, "Double Page").clicked() {
+                    self.double_page_mode = true;
+                }
+                ui.separator();
+                // Reading direction toggle
+                let dir_label = if self.right_to_left { "Right to Left" } else { "Left to Right" };
+                if ui.button(dir_label).clicked() {
+                    self.right_to_left = !self.right_to_left;
+                }
+                // Spacer to push filename to the right
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(&self.filenames[self.current_page]);
+                });
+                // ui.label(&self.filenames[self.current_page]);
+                // ui.label(format!(
+                //     "({}/{})",
+                //     self.current_page + 1,
+                //     self.filenames.len()
+                // ));
             });
             ui.add_space(8.0);
 
@@ -315,6 +336,14 @@ impl App for CBZViewerApp {
                     );
                 });
             }
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
+                ui.label(format!(
+                    "({}/{})",
+                    self.current_page + 1,
+                    self.filenames.len()
+                ));
+            });
+
         });
 
         // Schedule next frame repaint
