@@ -326,8 +326,10 @@ impl App for CBZViewerApp {
             // --- Display images ---
             if self.double_page_mode {
                 let page1 = self.current_page;
+                let total_pages = self.filenames.len();
+
                 if page1 == 0 {
-                    // Only show the cover
+                    // Cover: show only if loaded
                     let loaded = self.image_lru.lock().unwrap().get(&0).cloned();
                     if let Some(loaded) = loaded {
                         if !self.has_initialised_zoom {
@@ -350,6 +352,16 @@ impl App for CBZViewerApp {
                                 ui.add(Image::from_texture(handle).fit_to_exact_size(disp_size));
                             });
                         }
+                    } else {
+                        // Show spinner
+                        let spinner_size = 48.0;
+                        let spinner_rect = egui::Rect::from_center_size(
+                            image_area.center(),
+                            Vec2::splat(spinner_size),
+                        );
+                        ui.allocate_ui_at_rect(spinner_rect, |ui| {
+                            ui.add(egui::Spinner::new().size(spinner_size).color(egui::Color32::WHITE));
+                        });
                     }
                 } else {
                     let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
@@ -360,92 +372,106 @@ impl App for CBZViewerApp {
                         None
                     };
 
-                    // Zoom initialization
-                    if !self.has_initialised_zoom {
-                        if let Some(loaded1) = loaded1.as_ref() {
-                            self.reset_zoom(image_area, loaded1);
-                        }
-                    }
-
-                    // Texture cache
-                    let needs_update = self.dual_texture_cache.as_ref().map_or(true, |((idx1, _), opt2)| {
-                        let idx2 = loaded2.as_ref().map(|l| l.index);
-                        *idx1 != page1 || opt2.as_ref().map(|(i, _)| *i) != loaded2.as_ref().map(|l| l.index)
-                    });
-                    if needs_update {
-                        if let Some(loaded1) = loaded1.as_ref() {
-                            let (w1, h1) = loaded1.image.dimensions();
-                            let color_img1 = ColorImage::from_rgba_unmultiplied([w1 as usize, h1 as usize], &loaded1.image.to_rgba8());
-                            let handle1 = ui.ctx().load_texture(format!("tex{}", loaded1.index), color_img1, TextureOptions::default());
-                            let handle2 = if let Some(loaded2) = loaded2.as_ref() {
-                                let (w2, h2) = loaded2.image.dimensions();
-                                let color_img2 = ColorImage::from_rgba_unmultiplied([w2 as usize, h2 as usize], &loaded2.image.to_rgba8());
-                                Some((loaded2.index, ui.ctx().load_texture(format!("tex{}", loaded2.index), color_img2, TextureOptions::default())))
-                            } else {
-                                None
-                            };
-                            self.dual_texture_cache = Some(((loaded1.index, handle1), handle2));
-                        }
-                    }
-
-                    if let Some(((idx1, handle1), opt2)) = &self.dual_texture_cache {
-                        if let Some(loaded1) = loaded1.as_ref() {
-                            let (w1, h1) = loaded1.image.dimensions();
-                            let disp_size1 = Vec2::new(w1 as f32 * self.zoom, h1 as f32 * self.zoom);
-
-                            if let Some((idx2, handle2)) = opt2 {
-                                if let Some(loaded2) = loaded2.as_ref() {
-                                    let (w2, h2) = loaded2.image.dimensions();
-                                    let disp_size2 = Vec2::new(w2 as f32 * self.zoom, h2 as f32 * self.zoom);
-
-                                    let margin = PAGE_MARGIN_SIZE as f32;
-                                    let total_width = disp_size1.x + disp_size2.x + margin;
-                                    let center = image_area.center();
-                                    let left_start = center.x - total_width / 2.0;
-
-                                    if self.right_to_left {
-                                        // Show page2 on the left, page1 on the right
-                                        let rect2 = Rect::from_min_size(
-                                            pos2(left_start, center.y - disp_size2.y / 2.0),
-                                            disp_size2,
-                                        );
-                                        let rect1 = Rect::from_min_size(
-                                            pos2(left_start + disp_size2.x + margin, center.y - disp_size1.y / 2.0),
-                                            disp_size1,
-                                        );
-                                        ui.allocate_ui_at_rect(rect2, |ui| {
-                                            ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
-                                        });
-                                        ui.allocate_ui_at_rect(rect1, |ui| {
-                                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
-                                        });
-                                    } else {
-                                        // Show page1 on the left, page2 on the right
-                                        let rect1 = Rect::from_min_size(
-                                            pos2(left_start, center.y - disp_size1.y / 2.0),
-                                            disp_size1,
-                                        );
-                                        let rect2 = Rect::from_min_size(
-                                            pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
-                                            disp_size2,
-                                        );
-                                        ui.allocate_ui_at_rect(rect1, |ui| {
-                                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
-                                        });
-                                        ui.allocate_ui_at_rect(rect2, |ui| {
-                                            ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
-                                        });
-                                    }
-                                }
-                            } else {
-                                // Only one page (last page, odd count)
-                                let center = image_area.center();
-                                let rect = Rect::from_center_size(center, disp_size1);
-                                ui.allocate_ui_at_rect(rect, |ui| {
-                                    ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
-                                });
+                    // Only display if BOTH are loaded (unless last page and only one remains)
+                    let show_both = loaded1.is_some() && (page2 == usize::MAX || loaded2.is_some());
+                    if show_both {
+                        // Zoom initialization
+                        if !self.has_initialised_zoom {
+                            if let Some(loaded1) = loaded1.as_ref() {
+                                self.reset_zoom(image_area, loaded1);
                             }
                         }
+
+                        // Texture cache
+                        let needs_update = self.dual_texture_cache.as_ref().map_or(true, |((idx1, _), opt2)| {
+                            let idx2 = loaded2.as_ref().map(|l| l.index);
+                            *idx1 != page1 || opt2.as_ref().map(|(i, _)| *i) != loaded2.as_ref().map(|l| l.index)
+                        });
+                        if needs_update {
+                            if let Some(loaded1) = loaded1.as_ref() {
+                                let (w1, h1) = loaded1.image.dimensions();
+                                let color_img1 = ColorImage::from_rgba_unmultiplied([w1 as usize, h1 as usize], &loaded1.image.to_rgba8());
+                                let handle1 = ui.ctx().load_texture(format!("tex{}", loaded1.index), color_img1, TextureOptions::default());
+                                let handle2 = if let Some(loaded2) = loaded2.as_ref() {
+                                    let (w2, h2) = loaded2.image.dimensions();
+                                    let color_img2 = ColorImage::from_rgba_unmultiplied([w2 as usize, h2 as usize], &loaded2.image.to_rgba8());
+                                    Some((loaded2.index, ui.ctx().load_texture(format!("tex{}", loaded2.index), color_img2, TextureOptions::default())))
+                                } else {
+                                    None
+                                };
+                                self.dual_texture_cache = Some(((loaded1.index, handle1), handle2));
+                            }
+                        }
+
+                        if let Some(((idx1, handle1), opt2)) = &self.dual_texture_cache {
+                            if let Some(loaded1) = loaded1.as_ref() {
+                                let (w1, h1) = loaded1.image.dimensions();
+                                let disp_size1 = Vec2::new(w1 as f32 * self.zoom, h1 as f32 * self.zoom);
+
+                                if let Some((idx2, handle2)) = opt2 {
+                                    if let Some(loaded2) = loaded2.as_ref() {
+                                        let (w2, h2) = loaded2.image.dimensions();
+                                        let disp_size2 = Vec2::new(w2 as f32 * self.zoom, h2 as f32 * self.zoom);
+
+                                        let margin = PAGE_MARGIN_SIZE as f32;
+                                        let total_width = disp_size1.x + disp_size2.x + margin;
+                                        let center = image_area.center();
+                                        let left_start = center.x - total_width / 2.0;
+
+                                        if self.right_to_left {
+                                            // Show page2 on the left, page1 on the right
+                                            let rect2 = Rect::from_min_size(
+                                                pos2(left_start, center.y - disp_size2.y / 2.0),
+                                                disp_size2,
+                                            );
+                                            let rect1 = Rect::from_min_size(
+                                                pos2(left_start + disp_size2.x + margin, center.y - disp_size1.y / 2.0),
+                                                disp_size1,
+                                            );
+                                            ui.allocate_ui_at_rect(rect2, |ui| {
+                                                ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
+                                            });
+                                            ui.allocate_ui_at_rect(rect1, |ui| {
+                                                ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                                            });
+                                        } else {
+                                            // Show page1 on the left, page2 on the right
+                                            let rect1 = Rect::from_min_size(
+                                                pos2(left_start, center.y - disp_size1.y / 2.0),
+                                                disp_size1,
+                                            );
+                                            let rect2 = Rect::from_min_size(
+                                                pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
+                                                disp_size2,
+                                            );
+                                            ui.allocate_ui_at_rect(rect1, |ui| {
+                                                ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                                            });
+                                            ui.allocate_ui_at_rect(rect2, |ui| {
+                                                ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    // Only one page (last page, odd count)
+                                    let center = image_area.center();
+                                    let rect = Rect::from_center_size(center, disp_size1);
+                                    ui.allocate_ui_at_rect(rect, |ui| {
+                                        ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                                    });
+                                }
+                            }
+                        }
+                    } else {
+                        // Show spinner
+                        let spinner_size = 48.0;
+                        let spinner_rect = egui::Rect::from_center_size(
+                            image_area.center(),
+                            Vec2::splat(spinner_size),
+                        );
+                        ui.allocate_ui_at_rect(spinner_rect, |ui| {
+                            ui.add(egui::Spinner::new().size(spinner_size).color(egui::Color32::WHITE));
+                        });
                     }
                 }
             } else {
