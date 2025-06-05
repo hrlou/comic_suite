@@ -13,7 +13,7 @@ use std::{
 };
 
 use eframe::egui::{
-    pos2, Align, ColorImage, Image, Layout, ProgressBar, Rect, TextureFilter, TextureOptions, Vec2,
+    pos2, Align, ColorImage, Image, Layout, Rect, TextureFilter, TextureOptions, Vec2, Spinner,
 };
 use eframe::{egui, App, NativeOptions};
 use lru::LruCache;
@@ -24,6 +24,7 @@ use zip::ZipArchive;
 const WIN_WIDTH: f32 = 720.0;
 const WIN_HEIGHT: f32 = 1080.0;
 const CACHE_SIZE: usize = 20; // Number of images to cache
+const PAGE_MARGIN_SIZE: usize = 16; // Margin in pixels between pages
 
 #[derive(Clone)]
 struct LoadedPage {
@@ -38,7 +39,6 @@ struct CBZViewerApp {
     image_lru: Arc<Mutex<LruCache<usize, LoadedPage>>>,
     filenames: Vec<String>,
     current_page: usize,
-    progress: Arc<Mutex<f32>>,
     loading_thread: Option<thread::JoinHandle<()>>,
     zoom: f32,
     pan_offset: Vec2,
@@ -77,7 +77,6 @@ impl CBZViewerApp {
             filenames: names,
             image_lru: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(CACHE_SIZE).unwrap()))),
             current_page: 0,
-            progress: Arc::new(Mutex::new(0.0)),
             loading_thread: None,
             zoom: 1.0,
             pan_offset: Vec2::ZERO,
@@ -95,6 +94,7 @@ impl CBZViewerApp {
     /// Spawn background thread to load and decode image
     fn load_image_async(&mut self, page: usize) {
         {
+            // When starting a load, set progress to 0.0
             let mut loading = self.loading_pages.lock().unwrap();
             if loading.contains(&page) {
                 return;
@@ -104,13 +104,11 @@ impl CBZViewerApp {
 
         // Check LRU cache first
         if self.image_lru.lock().unwrap().get(&page).is_some() {
-            *self.progress.lock().unwrap() = 1.0;
             return;
         }
 
         let filenames = self.filenames.clone();
         let zip_path = self.zip_path.clone();
-        let progress = Arc::clone(&self.progress);
         let image_lru = Arc::clone(&self.image_lru);
         let loading_pages = Arc::clone(&self.loading_pages);
 
@@ -120,7 +118,6 @@ impl CBZViewerApp {
             let size = file.size();
 
             let mut buf = Vec::with_capacity(size as usize);
-            let mut total = 0u64;
             let mut tmp = [0u8; 8192];
 
             while let Ok(n) = file.read(&mut tmp) {
@@ -128,10 +125,9 @@ impl CBZViewerApp {
                     break;
                 }
                 buf.extend_from_slice(&tmp[..n]);
-                total += n as u64;
-                *progress.lock().unwrap() = (total as f32 / size as f32).min(1.0);
             }
 
+            // After reading all bytes and decoding:
             let img = image::load_from_memory(&buf).unwrap();
             let loaded_page = LoadedPage {
                 index: page,
@@ -139,7 +135,8 @@ impl CBZViewerApp {
                 image: img,
             };
             image_lru.lock().unwrap().put(page, loaded_page);
-            *progress.lock().unwrap() = 1.0;
+
+            // Remove from loading set
             loading_pages.lock().unwrap().remove(&page);
         }));
     }
@@ -264,6 +261,9 @@ impl App for CBZViewerApp {
             }
         } else {
             self.load_image_async(self.current_page);
+            if self.current_page + 1 < total_pages {
+                self.load_image_async(self.current_page + 1); // Preload next page
+            }
         }
 
         // --- Central image area ---
@@ -374,7 +374,9 @@ impl App for CBZViewerApp {
                                 if let Some(loaded2) = loaded2.as_ref() {
                                     let (w2, h2) = loaded2.image.dimensions();
                                     let disp_size2 = Vec2::new(w2 as f32 * self.zoom, h2 as f32 * self.zoom);
-                                    let total_width = disp_size1.x + disp_size2.x;
+
+                                    let margin = PAGE_MARGIN_SIZE as f32;
+                                    let total_width = disp_size1.x + disp_size2.x + margin;
                                     let center = image_area.center();
                                     let left_start = center.x - total_width / 2.0;
 
@@ -383,7 +385,7 @@ impl App for CBZViewerApp {
                                         disp_size1,
                                     );
                                     let rect2 = Rect::from_min_size(
-                                        pos2(left_start + disp_size1.x, center.y - disp_size2.y / 2.0),
+                                        pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
                                         disp_size2,
                                     );
                                     ui.allocate_ui_at_rect(rect1, |ui| {
@@ -439,6 +441,20 @@ impl App for CBZViewerApp {
                     self.filenames.len()
                 ));
             });
+
+            // --- Loading indicator ---
+            let in_cache = self.image_lru.lock().unwrap().get(&self.current_page).is_some();
+
+            if !in_cache {
+                let spinner_size = 48.0;
+                let spinner_rect = egui::Rect::from_center_size(
+                    image_area.center(),
+                    Vec2::splat(spinner_size),
+                );
+                ui.allocate_ui_at_rect(spinner_rect, |ui| {
+                    ui.add(egui::Spinner::new().size(spinner_size).color(egui::Color32::WHITE));
+                });
+            }
         });
     }
 }
