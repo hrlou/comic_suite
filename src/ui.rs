@@ -11,19 +11,36 @@ pub fn draw_spinner(ui: &mut Ui, area: Rect) {
     });
 }
 
-/// Draw a single page image centered in the area, with zoom and pan
-pub fn draw_single_page(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) {
+/// Draw a single page image, using the texture cache for efficiency
+pub fn draw_single_page(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    area: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut crate::texture_cache::TextureCache,
+) {
     let (w, h) = loaded.image.dimensions();
     let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
-    let color_img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &loaded.image.to_rgba8());
-    let handle = ui.ctx().load_texture(format!("tex{}", loaded.index), color_img, egui::TextureOptions::default());
+
+    let ctx = ui.ctx().clone();
+    // Use cached texture if available, otherwise upload and cache
+    let handle = if let Some(handle) = cache.get_single(loaded.index, zoom) {
+        handle.clone()
+    } else {
+        let color_img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &loaded.image.to_rgba8());
+        let handle = ctx.load_texture(format!("tex{}", loaded.index), color_img, egui::TextureOptions::default());
+        cache.set_single(loaded.index, zoom, handle.clone());
+        handle
+    };
+
     let rect = Rect::from_center_size(area.center() + pan, disp_size);
     ui.allocate_ui_at_rect(rect, |ui| {
         ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
     });
 }
 
-/// Draw two pages side by side with a margin, order depends on reading direction, with zoom and pan
+/// Draw two pages side by side, using the texture cache for efficiency
 pub fn draw_dual_page(
     ui: &mut Ui,
     loaded_left: &LoadedPage,
@@ -33,20 +50,46 @@ pub fn draw_dual_page(
     margin: f32,
     left_first: bool,
     pan: Vec2,
+    cache: &mut crate::texture_cache::TextureCache,
 ) {
     let (w1, h1) = loaded_left.image.dimensions();
     let disp_size1 = Vec2::new(w1 as f32 * zoom, h1 as f32 * zoom);
-    let color_img1 = egui::ColorImage::from_rgba_unmultiplied([w1 as usize, h1 as usize], &loaded_left.image.to_rgba8());
-    let handle1 = ui.ctx().load_texture(format!("tex{}", loaded_left.index), color_img1, egui::TextureOptions::default());
 
-    if let Some(loaded2) = loaded_right {
+    let ctx = ui.ctx().clone();
+    let handle1 = if let Some((handle, _)) = cache.get_dual(loaded_left.index, loaded_right.map(|r| r.index), zoom) {
+        handle.clone()
+    } else {
+        let color_img1 = egui::ColorImage::from_rgba_unmultiplied([w1 as usize, h1 as usize], &loaded_left.image.to_rgba8());
+        ctx.load_texture(format!("tex{}", loaded_left.index), color_img1, egui::TextureOptions::default())
+    };
+
+    let (handle2, disp_size2) = if let Some(loaded2) = loaded_right {
         let (w2, h2) = loaded2.image.dimensions();
         let disp_size2 = Vec2::new(w2 as f32 * zoom, h2 as f32 * zoom);
-        let color_img2 = egui::ColorImage::from_rgba_unmultiplied([w2 as usize, h2 as usize], &loaded2.image.to_rgba8());
-        let handle2 = ui.ctx().load_texture(format!("tex{}", loaded2.index), color_img2, egui::TextureOptions::default());
+        let handle2 = if let Some((_, Some(handle))) = cache.get_dual(loaded_left.index, Some(loaded2.index), zoom) {
+            handle.clone()
+        } else {
+            let color_img2 = egui::ColorImage::from_rgba_unmultiplied([w2 as usize, h2 as usize], &loaded2.image.to_rgba8());
+            ctx.load_texture(format!("tex{}", loaded2.index), color_img2, egui::TextureOptions::default())
+        };
+        (Some(handle2), Some(disp_size2))
+    } else {
+        (None, None)
+    };
 
+    // Update cache if needed
+    if cache.get_dual(loaded_left.index, loaded_right.map(|r| r.index), zoom).is_none() {
+        cache.set_dual(
+            loaded_left.index,
+            handle1.clone(),
+            zoom,
+            loaded_right.map(|r| (r.index, handle2.as_ref().unwrap().clone())),
+        );
+    }
+
+    let center = area.center() + pan;
+    if let Some((disp_size2, handle2)) = disp_size2.zip(handle2) {
         let total_width = disp_size1.x + disp_size2.x + margin;
-        let center = area.center() + pan;
         let left_start = center.x - total_width / 2.0;
 
         let (rect_left, rect_right) = (

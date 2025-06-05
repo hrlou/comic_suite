@@ -2,6 +2,7 @@
 #![windows_subsystem = "windows"]
 
 mod config;
+mod texture_cache;
 mod image_cache;
 mod ui;
 mod app;
