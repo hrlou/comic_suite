@@ -1,11 +1,9 @@
-mod config;
-mod image_cache;
-mod ui;
+use crate::config::*;
+use crate::image_cache::{LoadedPage, SharedImageCache, new_image_cache, load_image_async};
+use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
 
-use config::*;
-use image_cache::*;
-use ui::*;
-use eframe::egui::{self, App, Vec2, Rect, pos2};
+use eframe::{egui::{self, Vec2, Rect, pos2}, App};
+use image::GenericImageView;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
@@ -174,6 +172,12 @@ impl App for CBZViewerApp {
             }
         }
 
+        // --- Zoom with mouse wheel ---
+        if input.scroll_delta.y != 0.0 {
+            let zoom_factor = 1.1_f32.powf(input.scroll_delta.y / 10.0);
+            self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
+        }
+
         // --- Preload images for current view ---
         if self.double_page_mode {
             load_image_async(
@@ -227,7 +231,7 @@ impl App for CBZViewerApp {
                 ),
             );
 
-            // Drag for panning
+            // --- Pan (drag) ---
             let response = ui.allocate_rect(image_area, egui::Sense::drag());
             if response.drag_started() {
                 self.drag_start = response.interact_pointer_pos();
@@ -254,7 +258,7 @@ impl App for CBZViewerApp {
                         if !self.has_initialised_zoom {
                             self.reset_zoom(image_area, &loaded);
                         }
-                        draw_single_page(ui, &loaded, image_area, self.zoom);
+                        draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset);
                     } else {
                         draw_spinner(ui, image_area);
                     }
@@ -283,6 +287,7 @@ impl App for CBZViewerApp {
                             self.zoom,
                             PAGE_MARGIN_SIZE as f32,
                             left_first,
+                            self.pan_offset,
                         );
                     } else {
                         draw_spinner(ui, image_area);
@@ -294,7 +299,7 @@ impl App for CBZViewerApp {
                     if !self.has_initialised_zoom {
                         self.reset_zoom(image_area, &loaded);
                     }
-                    draw_single_page(ui, &loaded, image_area, self.zoom);
+                    draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset);
                 } else {
                     draw_spinner(ui, image_area);
                 }

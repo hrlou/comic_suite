@@ -1,4 +1,5 @@
-use eframe::egui::{self, Ui, Vec2, Rect, Image, Spinner, Color32};
+use eframe::egui::{self, pos2, Ui, Vec2, Rect, Image, Spinner, Color32};
+use image::GenericImageView;
 use crate::image_cache::LoadedPage;
 
 /// Draw a centered spinner in the given area
@@ -10,19 +11,19 @@ pub fn draw_spinner(ui: &mut Ui, area: Rect) {
     });
 }
 
-/// Draw a single page image centered in the area
-pub fn draw_single_page(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32) {
+/// Draw a single page image centered in the area, with zoom and pan
+pub fn draw_single_page(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) {
     let (w, h) = loaded.image.dimensions();
     let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
     let color_img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &loaded.image.to_rgba8());
     let handle = ui.ctx().load_texture(format!("tex{}", loaded.index), color_img, egui::TextureOptions::default());
-    let rect = Rect::from_center_size(area.center(), disp_size);
+    let rect = Rect::from_center_size(area.center() + pan, disp_size);
     ui.allocate_ui_at_rect(rect, |ui| {
         ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
     });
 }
 
-/// Draw two pages side by side with a margin, order depends on reading direction
+/// Draw two pages side by side with a margin, order depends on reading direction, with zoom and pan
 pub fn draw_dual_page(
     ui: &mut Ui,
     loaded_left: &LoadedPage,
@@ -31,6 +32,7 @@ pub fn draw_dual_page(
     zoom: f32,
     margin: f32,
     left_first: bool,
+    pan: Vec2,
 ) {
     let (w1, h1) = loaded_left.image.dimensions();
     let disp_size1 = Vec2::new(w1 as f32 * zoom, h1 as f32 * zoom);
@@ -44,7 +46,7 @@ pub fn draw_dual_page(
         let handle2 = ui.ctx().load_texture(format!("tex{}", loaded2.index), color_img2, egui::TextureOptions::default());
 
         let total_width = disp_size1.x + disp_size2.x + margin;
-        let center = area.center();
+        let center = area.center() + pan;
         let left_start = center.x - total_width / 2.0;
 
         let (rect_left, rect_right) = (
@@ -74,7 +76,7 @@ pub fn draw_dual_page(
             });
         }
     } else {
-        let rect = Rect::from_center_size(area.center(), disp_size1);
+        let rect = Rect::from_center_size(area.center() + pan, disp_size1);
         ui.allocate_ui_at_rect(rect, |ui| {
             ui.add(Image::from_texture(&handle1).fit_to_exact_size(disp_size1));
         });
