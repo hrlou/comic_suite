@@ -190,8 +190,8 @@ impl App for CBZViewerApp {
         }
 
         // --- Zoom with mouse wheel ---
-        if input.scroll_delta.y != 0.0 {
-            let zoom_factor = 1.1_f32.powf(input.scroll_delta.y / 10.0);
+        if input.raw_scroll_delta.y != 0.0 {
+            let zoom_factor = 1.1_f32.powf(input.raw_scroll_delta.y / 10.0);
             self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
             self.texture_cache.clear();
         }
