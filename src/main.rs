@@ -25,6 +25,9 @@ const WIN_WIDTH: f32 = 720.0;
 const WIN_HEIGHT: f32 = 1080.0;
 const CACHE_SIZE: usize = 20; // Number of images to cache
 const PAGE_MARGIN_SIZE: usize = 16; // Margin in pixels between pages
+const DEFAULT_DUAL_PAGE_MODE: bool = false;
+const DEFAULT_RIGHT_TO_LEFT: bool = false;
+const READING_DIRECTION_AFFECTS_ARROWS: bool = true;
 
 #[derive(Clone)]
 struct LoadedPage {
@@ -83,8 +86,8 @@ impl CBZViewerApp {
             window_size: Vec2::ZERO,
             drag_start: None,
             has_initialised_zoom: false,
-            double_page_mode: false,
-            right_to_left: false,
+            double_page_mode: DEFAULT_DUAL_PAGE_MODE,
+            right_to_left: DEFAULT_RIGHT_TO_LEFT,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
             single_texture_cache: None,
             dual_texture_cache: None,
@@ -201,11 +204,19 @@ impl App for CBZViewerApp {
                             ui.label(&self.filenames[0]);
                         } else {
                             let page2 = if page1 + 1 < total_pages { page1 + 1 } else { page1 };
-                            ui.label(format!(
-                                "{} | {}",
-                                &self.filenames[page1],
-                                &self.filenames[page2]
-                            ));
+                            if self.right_to_left {
+                                ui.label(format!(
+                                    "{} | {}",
+                                    &self.filenames[page2],
+                                    &self.filenames[page1]
+                                ));
+                            } else {
+                                ui.label(format!(
+                                    "{} | {}",
+                                    &self.filenames[page1],
+                                    &self.filenames[page2]
+                                ));
+                            }
                         }
                     } else {
                         ui.label(&self.filenames[self.current_page]);
@@ -216,7 +227,13 @@ impl App for CBZViewerApp {
 
         // Navigation
         if self.double_page_mode {
-            if input.key_pressed(egui::Key::ArrowRight) {
+            let (next_key, prev_key) = if READING_DIRECTION_AFFECTS_ARROWS && self.right_to_left {
+                (egui::Key::ArrowLeft, egui::Key::ArrowRight)
+            } else {
+                (egui::Key::ArrowRight, egui::Key::ArrowLeft)
+            };
+
+            if input.key_pressed(next_key) {
                 if self.current_page == 0 && total_pages > 1 {
                     self.current_page = 1;
                 } else if self.current_page + 2 < total_pages {
@@ -228,7 +245,7 @@ impl App for CBZViewerApp {
                 self.single_texture_cache = None;
                 self.has_initialised_zoom = false;
             }
-            if input.key_pressed(egui::Key::ArrowLeft) {
+            if input.key_pressed(prev_key) {
                 if self.current_page == 1 || self.current_page == 0 {
                     self.current_page = 0;
                 } else if self.current_page >= 2 {
@@ -239,13 +256,19 @@ impl App for CBZViewerApp {
                 self.has_initialised_zoom = false;
             }
         } else {
-            if input.key_pressed(egui::Key::ArrowRight) && self.current_page + 1 < total_pages {
+            let (next_key, prev_key) = if READING_DIRECTION_AFFECTS_ARROWS && self.right_to_left {
+                (egui::Key::ArrowLeft, egui::Key::ArrowRight)
+            } else {
+                (egui::Key::ArrowRight, egui::Key::ArrowLeft)
+            };
+
+            if input.key_pressed(next_key) && self.current_page + 1 < total_pages {
                 self.current_page += 1;
                 self.single_texture_cache = None;
                 self.dual_texture_cache = None;
                 self.has_initialised_zoom = false;
             }
-            if input.key_pressed(egui::Key::ArrowLeft) && self.current_page > 0 {
+            if input.key_pressed(prev_key) && self.current_page > 0 {
                 self.current_page -= 1;
                 self.single_texture_cache = None;
                 self.dual_texture_cache = None;
@@ -380,20 +403,39 @@ impl App for CBZViewerApp {
                                     let center = image_area.center();
                                     let left_start = center.x - total_width / 2.0;
 
-                                    let rect1 = Rect::from_min_size(
-                                        pos2(left_start, center.y - disp_size1.y / 2.0),
-                                        disp_size1,
-                                    );
-                                    let rect2 = Rect::from_min_size(
-                                        pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
-                                        disp_size2,
-                                    );
-                                    ui.allocate_ui_at_rect(rect1, |ui| {
-                                        ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
-                                    });
-                                    ui.allocate_ui_at_rect(rect2, |ui| {
-                                        ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
-                                    });
+                                    if self.right_to_left {
+                                        // Show page2 on the left, page1 on the right
+                                        let rect2 = Rect::from_min_size(
+                                            pos2(left_start, center.y - disp_size2.y / 2.0),
+                                            disp_size2,
+                                        );
+                                        let rect1 = Rect::from_min_size(
+                                            pos2(left_start + disp_size2.x + margin, center.y - disp_size1.y / 2.0),
+                                            disp_size1,
+                                        );
+                                        ui.allocate_ui_at_rect(rect2, |ui| {
+                                            ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
+                                        });
+                                        ui.allocate_ui_at_rect(rect1, |ui| {
+                                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                                        });
+                                    } else {
+                                        // Show page1 on the left, page2 on the right
+                                        let rect1 = Rect::from_min_size(
+                                            pos2(left_start, center.y - disp_size1.y / 2.0),
+                                            disp_size1,
+                                        );
+                                        let rect2 = Rect::from_min_size(
+                                            pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
+                                            disp_size2,
+                                        );
+                                        ui.allocate_ui_at_rect(rect1, |ui| {
+                                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                                        });
+                                        ui.allocate_ui_at_rect(rect2, |ui| {
+                                            ui.add(Image::from_texture(handle2).fit_to_exact_size(disp_size2));
+                                        });
+                                    }
                                 }
                             } else {
                                 // Only one page (last page, odd count)
