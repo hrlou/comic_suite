@@ -3,7 +3,7 @@ use crate::image_cache::{load_image_async, new_image_cache, LoadedPage, PageImag
 use crate::texture_cache::TextureCache;
 use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
 
-use eframe::{egui::{self, Vec2, Rect, pos2}, App};
+use eframe::{egui::{self, Vec2, Rect, Layout, pos2}, App};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
@@ -114,20 +114,41 @@ impl CBZViewerApp {
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
+        if let Some(file) = dropped_files.iter().find_map(|f| f.path.clone()) {
+            let path = file.to_path_buf();
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+            if ext == "cbz" || ext == "zip" {
+                // Re-initialize the app with the new file
+                *self = CBZViewerApp::new(path);
+            }
+        }
+
         let total_pages = self.filenames.len();
         let input = ctx.input(|i| i.clone());
 
         // --- Overlay UI: always on top ---
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.selectable_label(!self.double_page_mode, "Single").clicked() {
-                    self.double_page_mode = false;
-                    self.current_page = self.current_page.min(total_pages.saturating_sub(1));
-                    self.has_initialised_zoom = false;
+                let direction_label = if self.right_to_left { "R <- L" } else { "L -> R" };
+                if ui.button(direction_label)
+                    .on_hover_text("Reading direction")
+                    .clicked()
+                {
+                    self.right_to_left = !self.right_to_left;
                     self.texture_cache.clear();
                 }
-                if ui.selectable_label(self.double_page_mode, "Double").clicked() {
-                    if !self.double_page_mode {
+
+                if ui.selectable_label(self.double_page_mode, "Dual")
+                    .on_hover_text("Show two pages at once, cover page will be excluded")
+                    .clicked()
+                {
+                    if self.double_page_mode {
+                        self.double_page_mode = false;
+                        self.current_page = self.current_page.min(total_pages.saturating_sub(1));
+                        self.has_initialised_zoom = false;
+                        self.texture_cache.clear();
+                    } else { 
                         if self.current_page > 0 && self.current_page % 2 != 0 {
                             self.current_page -= 1;
                         }
@@ -136,14 +157,12 @@ impl eframe::App for CBZViewerApp {
                         self.texture_cache.clear();
                     }
                 }
-                let dir_label = if self.right_to_left { "R <- L" } else { "L -> R" };
-                if ui.button(dir_label).clicked() {
-                    self.right_to_left = !self.right_to_left;
-                    self.texture_cache.clear();
-                }
 
                 if self.double_page_mode {
-                    if ui.button("Bump").clicked() {
+                    if ui.button("Bump")
+                        .on_hover_text("Bump over a single page, use this if there is misalignment")
+                        .clicked()
+                    {
                         let total_pages = self.filenames.len();
                         if self.current_page + 1 < total_pages {
                             self.current_page += 1;
@@ -152,6 +171,32 @@ impl eframe::App for CBZViewerApp {
                         }
                     }
                 }
+                
+                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    let file_label = if self.double_page_mode && self.current_page != 0 {
+                        let left = self.current_page;
+                        let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
+                        if self.right_to_left {
+                            format!(
+                                "{} | {}",
+                                self.filenames.get(right).unwrap_or(&String::from("")),
+                                self.filenames.get(left).unwrap_or(&String::from(""))
+                            )
+                        } else {
+                            format!(
+                                "{} | {}",
+                                self.filenames.get(left).unwrap_or(&String::from("")),
+                                self.filenames.get(right).unwrap_or(&String::from(""))
+                            )
+                        }
+                    } else {
+                        self.filenames
+                            .get(self.current_page)
+                            .cloned()
+                            .unwrap_or_else(|| String::from(""))
+                    };
+                    ui.label(file_label);
+                });
             });
         });
 
@@ -165,7 +210,6 @@ impl eframe::App for CBZViewerApp {
                     self.texture_cache.clear();
                 }
                 ui.separator();
-                use egui::Layout;
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                     // Add your controls here, they will appear on the right side
                     if ui.button("Next").clicked() {
@@ -174,13 +218,13 @@ impl eframe::App for CBZViewerApp {
                     if ui.button("Prev").clicked() {
                         self.current_page = self.current_page.saturating_sub(1);
                     }
-                    let page_label = if self.double_page_mode {
+                    let page_label = if self.double_page_mode && self.current_page != 0 {
                         let left = self.current_page;
                         let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
                         if self.right_to_left {
-                            format!("({},{})/{}", right + 1, left + 1, total_pages)
+                            format!("Page ({},{})/{}", right + 1, left + 1, total_pages)
                         } else {
-                            format!("({},{})/{}", left + 1, right + 1, total_pages)
+                            format!("Page ({},{})/{}", left + 1, right + 1, total_pages)
                         }
                     } else {
                         format!("Page {}/{}", self.current_page + 1, total_pages)
@@ -192,8 +236,11 @@ impl eframe::App for CBZViewerApp {
 
         // --- Navigation logic (arrow keys) ---
         let (next_key, prev_key) = self.navigation_keys();
+        let next_pressed = input.key_pressed(next_key) || input.key_pressed(egui::Key::ArrowDown);
+        let prev_pressed = input.key_pressed(prev_key) || input.key_pressed(egui::Key::ArrowUp);
+
         if self.double_page_mode {
-            if input.key_pressed(next_key) {
+            if next_pressed {
                 if self.current_page == 0 && total_pages > 1 {
                     self.current_page = 1;
                 } else if self.current_page + 2 < total_pages {
@@ -204,7 +251,7 @@ impl eframe::App for CBZViewerApp {
                 self.has_initialised_zoom = false;
                 self.texture_cache.clear();
             }
-            if input.key_pressed(prev_key) {
+            if prev_pressed {
                 if self.current_page == 1 || self.current_page == 0 {
                     self.current_page = 0;
                 } else if self.current_page >= 2 {
@@ -214,12 +261,12 @@ impl eframe::App for CBZViewerApp {
                 self.texture_cache.clear();
             }
         } else {
-            if input.key_pressed(next_key) && self.current_page + 1 < total_pages {
+            if next_pressed && self.current_page + 1 < total_pages {
                 self.current_page += 1;
                 self.has_initialised_zoom = false;
                 self.texture_cache.clear();
             }
-            if input.key_pressed(prev_key) && self.current_page > 0 {
+            if prev_pressed && self.current_page > 0 {
                 self.current_page -= 1;
                 self.has_initialised_zoom = false;
                 self.texture_cache.clear();
