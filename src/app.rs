@@ -1,15 +1,13 @@
 use crate::config::*;
-use crate::image_cache::{LoadedPage, SharedImageCache, new_image_cache, load_image_async};
+use crate::image_cache::{load_image_async, new_image_cache, LoadedPage, PageImage, SharedImageCache};
 use crate::texture_cache::TextureCache;
 use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
 
 use eframe::{egui::{self, Vec2, Rect, pos2}, App};
-use image::GenericImageView;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 
-/// Main application state and logic
 pub struct CBZViewerApp {
     pub zip_path: PathBuf,
     pub image_lru: SharedImageCache,
@@ -18,17 +16,15 @@ pub struct CBZViewerApp {
     pub loading_thread: Option<std::thread::JoinHandle<()>>,
     pub zoom: f32,
     pub pan_offset: Vec2,
-    pub window_size: Vec2,
     pub drag_start: Option<egui::Pos2>,
     pub has_initialised_zoom: bool,
     pub double_page_mode: bool,
     pub right_to_left: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
-    pub texture_cache: TextureCache, // Caches GPU textures for fast redraws
+    pub texture_cache: TextureCache,
 }
 
 impl CBZViewerApp {
-    /// Load archive, scan for images, initialize state
     pub fn new(zip_path: PathBuf) -> Self {
         let file = std::fs::File::open(&zip_path).unwrap();
         let mut archive = zip::ZipArchive::new(file).unwrap();
@@ -55,7 +51,6 @@ impl CBZViewerApp {
             loading_thread: None,
             zoom: 1.0,
             pan_offset: Vec2::ZERO,
-            window_size: Vec2::ZERO,
             drag_start: None,
             has_initialised_zoom: false,
             double_page_mode: DEFAULT_DUAL_PAGE_MODE,
@@ -65,7 +60,6 @@ impl CBZViewerApp {
         }
     }
 
-    /// Reset zoom and pan to fit the image in the area, clear texture cache
     fn reset_zoom(&mut self, image_area: Rect, loaded: &LoadedPage) {
         let (w, h) = loaded.image.dimensions();
         let zoom_x = image_area.width() / w as f32;
@@ -76,7 +70,6 @@ impl CBZViewerApp {
         self.texture_cache.clear();
     }
 
-    /// Get navigation keys based on reading direction
     fn navigation_keys(&self) -> (egui::Key, egui::Key) {
         if READING_DIRECTION_AFFECTS_ARROWS && self.right_to_left {
             (egui::Key::ArrowLeft, egui::Key::ArrowRight)
@@ -84,32 +77,58 @@ impl CBZViewerApp {
             (egui::Key::ArrowRight, egui::Key::ArrowLeft)
         }
     }
+
+    /// Clamp pan so at least a corner of the image is visible
+    fn clamp_pan(&mut self, image_size: (u32, u32), area: egui::Rect) {
+        let border = 20.0; // Minimum visible border of the image in pixels
+        
+        let (img_w, img_h) = (image_size.0 as f32 * self.zoom, image_size.1 as f32 * self.zoom);
+        let win_w = area.width();
+        let win_h = area.height();
+        
+        // The image's center is at pan_offset = (0,0)
+        // Allow panning, but always keep at least `border` pixels of the image visible
+        
+        let half_w = win_w / 2.0;
+        let half_h = win_h / 2.0;
+        let half_img_w = img_w / 2.0;
+        let half_img_h = img_h / 2.0;
+        
+        let max_pan_x = (half_img_w - half_w + border).max(0.0);
+        let max_pan_y = (half_img_h - half_h + border).max(0.0);
+        
+        // If the image is smaller than the viewport, allow panning within the border margin
+        if img_w + border * 2.0 <= win_w {
+            self.pan_offset.x = self.pan_offset.x.clamp(-(win_w/2.0 - half_img_w - border), win_w/2.0 - half_img_w - border);
+        } else {
+            self.pan_offset.x = self.pan_offset.x.clamp(-max_pan_x, max_pan_x);
+        }
+    
+        if img_h + border * 2.0 <= win_h {
+            self.pan_offset.y = self.pan_offset.y.clamp(-(win_h/2.0 - half_img_h - border), win_h/2.0 - half_img_h - border);
+        } else {
+            self.pan_offset.y = self.pan_offset.y.clamp(-max_pan_y, max_pan_y);
+        }
+    }
 }
 
-impl App for CBZViewerApp {
+impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let total_pages = self.filenames.len();
         let input = ctx.input(|i| i.clone());
 
-        // --- Top bar: navigation and legend ---
+        // --- Overlay UI: always on top ---
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // Toggle single/dual page mode
-                if ui.selectable_label(!self.double_page_mode, "Single Page").clicked() {
-                    if self.double_page_mode {
-                        self.double_page_mode = false;
-                        self.current_page = self.current_page.min(total_pages.saturating_sub(1));
-                        self.has_initialised_zoom = false;
-                        self.texture_cache.clear();
-                    }
+                if ui.selectable_label(!self.double_page_mode, "Single").clicked() {
+                    self.double_page_mode = false;
+                    self.current_page = self.current_page.min(total_pages.saturating_sub(1));
+                    self.has_initialised_zoom = false;
+                    self.texture_cache.clear();
                 }
-                if ui.selectable_label(self.double_page_mode, "Double Page").clicked() {
+                if ui.selectable_label(self.double_page_mode, "Double").clicked() {
                     if !self.double_page_mode {
-                        if self.current_page == 0 {
-                            // Stay at 0
-                        } else if self.current_page % 2 == 0 {
-                            // Even page, stay
-                        } else {
+                        if self.current_page > 0 && self.current_page % 2 != 0 {
                             self.current_page -= 1;
                         }
                         self.double_page_mode = true;
@@ -117,38 +136,56 @@ impl App for CBZViewerApp {
                         self.texture_cache.clear();
                     }
                 }
-                ui.separator();
-                // Toggle reading direction
-                let dir_label = if self.right_to_left { "Right to Left" } else { "Left to Right" };
+                let dir_label = if self.right_to_left { "R <- L" } else { "L -> R" };
                 if ui.button(dir_label).clicked() {
                     self.right_to_left = !self.right_to_left;
                     self.texture_cache.clear();
                 }
-                // Legend: show filenames for current pages
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.double_page_mode {
-                        let page1 = self.current_page;
-                        if page1 == 0 {
-                            ui.label(&self.filenames[0]);
+
+                if self.double_page_mode {
+                    if ui.button("Bump").clicked() {
+                        let total_pages = self.filenames.len();
+                        if self.current_page + 1 < total_pages {
+                            self.current_page += 1;
+                            self.has_initialised_zoom = false;
+                            self.texture_cache.clear();
+                        }
+                    }
+                }
+            });
+        });
+
+        egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.add(egui::Slider::new(&mut self.zoom, 0.05..=10.0));
+                if ui.button("Reset Zoom").clicked() {
+                    self.zoom = 1.0;
+                    self.pan_offset = Vec2::ZERO;
+                    self.has_initialised_zoom = false;
+                    self.texture_cache.clear();
+                }
+                ui.separator();
+                use egui::Layout;
+                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Add your controls here, they will appear on the right side
+                    if ui.button("Next").clicked() {
+                        self.current_page = (self.current_page + 1).min(self.filenames.len().saturating_sub(1));
+                    }
+                    if ui.button("Prev").clicked() {
+                        self.current_page = self.current_page.saturating_sub(1);
+                    }
+                    let page_label = if self.double_page_mode {
+                        let left = self.current_page;
+                        let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
+                        if self.right_to_left {
+                            format!("({},{})/{}", right + 1, left + 1, total_pages)
                         } else {
-                            let page2 = if page1 + 1 < total_pages { page1 + 1 } else { page1 };
-                            if self.right_to_left {
-                                ui.label(format!(
-                                    "{} | {}",
-                                    &self.filenames[page2],
-                                    &self.filenames[page1]
-                                ));
-                            } else {
-                                ui.label(format!(
-                                    "{} | {}",
-                                    &self.filenames[page1],
-                                    &self.filenames[page2]
-                                ));
-                            }
+                            format!("({},{})/{}", left + 1, right + 1, total_pages)
                         }
                     } else {
-                        ui.label(&self.filenames[self.current_page]);
-                    }
+                        format!("Page {}/{}", self.current_page + 1, total_pages)
+                    };
+                    ui.label(page_label);
                 });
             });
         });
@@ -235,19 +272,10 @@ impl App for CBZViewerApp {
 
         // --- Central image area (main viewer) ---
         egui::CentralPanel::default().show(ctx, |ui| {
-            let top_bar_height = 32.0;
-            let bottom_bar_height = 32.0;
             let available_rect = ui.max_rect();
-            let image_area = Rect::from_min_max(
-                pos2(
-                    available_rect.left(),
-                    available_rect.top() + top_bar_height + 8.0,
-                ),
-                pos2(
-                    available_rect.right(),
-                    available_rect.bottom() - bottom_bar_height,
-                ),
-            );
+            //let image_area = available_rect;
+            // let image_area = ui.available_size();
+            let image_area = ui.available_rect_before_wrap();
 
             // --- Pan (drag to move image) ---
             let response = ui.allocate_rect(image_area, egui::Sense::drag());
@@ -260,7 +288,7 @@ impl App for CBZViewerApp {
                         let delta = pos - start;
                         self.pan_offset += delta;
                         self.drag_start = Some(pos);
-                        self.texture_cache.clear(); // Pan changes image position, so clear cache
+                        self.texture_cache.clear();
                     }
                 }
             }
@@ -271,47 +299,44 @@ impl App for CBZViewerApp {
             // --- Display images or spinner ---
             if self.double_page_mode {
                 let page1 = self.current_page;
-                if page1 == 0 {
-                    let loaded = self.image_lru.lock().unwrap().get(&0).cloned();
-                    if let Some(loaded) = loaded {
-                        if !self.has_initialised_zoom {
-                            self.reset_zoom(image_area, &loaded);
-                        }
-                        draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
-                    } else {
-                        draw_spinner(ui, image_area);
-                    }
+                let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
+                let loaded1 = self.image_lru.lock().unwrap().get(&page1).cloned();
+                let loaded2 = if page2 != usize::MAX {
+                    self.image_lru.lock().unwrap().get(&page2).cloned()
                 } else {
-                    let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
-                    let loaded1 = self.image_lru.lock().unwrap().get(&page1).cloned();
-                    let loaded2 = if page2 != usize::MAX {
-                        self.image_lru.lock().unwrap().get(&page2).cloned()
-                    } else {
-                        None
-                    };
+                    None
+                };
 
-                    let both_loaded = loaded1.is_some() && (page2 == usize::MAX || loaded2.is_some());
-                    if both_loaded {
-                        if !self.has_initialised_zoom {
-                            if let Some(ref loaded1) = loaded1 {
-                                self.reset_zoom(image_area, loaded1);
-                            }
-                        }
-                        let left_first = !self.right_to_left;
-                        draw_dual_page(
-                            ui,
-                            loaded1.as_ref().unwrap(),
-                            loaded2.as_ref(),
-                            image_area,
-                            self.zoom,
-                            PAGE_MARGIN_SIZE as f32,
-                            left_first,
-                            self.pan_offset,
-                            &mut self.texture_cache,
-                        );
-                    } else {
-                        draw_spinner(ui, image_area);
+                if let (Some(loaded1), Some(loaded2)) = (&loaded1, &loaded2) {
+                    if !self.has_initialised_zoom {
+                        self.reset_zoom(image_area, loaded1);
                     }
+                    let left_first = !self.right_to_left;
+                    draw_dual_page(
+                        ui,
+                        loaded1,
+                        Some(loaded2),
+                        image_area,
+                        self.zoom,
+                        PAGE_MARGIN_SIZE as f32,
+                        left_first,
+                        self.pan_offset,
+                        &mut self.texture_cache,
+                    );
+                    // Clamp pan so at least a corner of the image is visible
+                    let (w1, h1) = loaded1.image.dimensions();
+                    let (w2, h2) = loaded2.image.dimensions();
+                    let total_width = w1 + w2;
+                    let max_height = h1.max(h2);
+                    self.clamp_pan((total_width, max_height), image_area);
+                } else if let Some(loaded1) = &loaded1 {
+                    if !self.has_initialised_zoom {
+                        self.reset_zoom(image_area, loaded1);
+                    }
+                    draw_single_page(ui, loaded1, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
+                    self.clamp_pan(loaded1.image.dimensions(), image_area);
+                } else {
+                    draw_spinner(ui, image_area);
                 }
             } else {
                 let loaded = self.image_lru.lock().unwrap().get(&self.current_page).cloned();
@@ -320,19 +345,11 @@ impl App for CBZViewerApp {
                         self.reset_zoom(image_area, &loaded);
                     }
                     draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
+                    self.clamp_pan(loaded.image.dimensions(), image_area);
                 } else {
                     draw_spinner(ui, image_area);
                 }
             }
-
-            // --- Bottom right: page number ---
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
-                ui.label(format!(
-                    "({}/{})",
-                    self.current_page + 1,
-                    self.filenames.len()
-                ));
-            });
         });
     }
 }
