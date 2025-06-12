@@ -8,6 +8,7 @@ mod image_cache;
 mod ui;
 mod app;
 mod error;
+mod ui_log;
 
 use app::CBZViewerApp;
 use config::{WIN_WIDTH, WIN_HEIGHT};

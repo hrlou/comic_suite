@@ -104,12 +104,197 @@ impl CBZViewerApp {
             self.pan_offset.y = self.pan_offset.y.clamp(-max_pan_y, max_pan_y);
         }
     }
+
+    fn draw_top_bar(&mut self, ctx: &egui::Context, total_pages: usize) {
+        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let direction_label = if self.right_to_left { "R <- L" } else { "L -> R" };
+                if ui.button(direction_label)
+                    .on_hover_text("Reading direction")
+                    .clicked()
+                {
+                    self.right_to_left = !self.right_to_left;
+                    self.texture_cache.clear();
+                }
+
+                if ui.selectable_label(self.double_page_mode, "Dual")
+                    .on_hover_text("Show two pages at once, cover page will be excluded")
+                    .clicked()
+                {
+                    if self.double_page_mode {
+                        self.double_page_mode = false;
+                        self.current_page = self.current_page.min(total_pages.saturating_sub(1));
+                        self.has_initialised_zoom = false;
+                        self.texture_cache.clear();
+                    } else { 
+                        if self.current_page > 0 && self.current_page % 2 != 0 {
+                            self.current_page -= 1;
+                        }
+                        self.double_page_mode = true;
+                        self.has_initialised_zoom = false;
+                        self.texture_cache.clear();
+                    }
+                }
+
+                if self.double_page_mode {
+                    if ui.button("Bump")
+                        .on_hover_text("Bump over a single page, use this if there is misalignment")
+                        .clicked()
+                    {
+                        if self.current_page + 1 < total_pages {
+                            self.current_page += 1;
+                            self.has_initialised_zoom = false;
+                            self.texture_cache.clear();
+                        }
+                    }
+                }
+                
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let file_label = if self.double_page_mode && self.current_page != 0 {
+                        let left = self.current_page;
+                        let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
+                        if self.right_to_left {
+                            format!(
+                                "{} | {}",
+                                self.filenames.get(right).unwrap_or(&String::from("")),
+                                self.filenames.get(left).unwrap_or(&String::from(""))
+                            )
+                        } else {
+                            format!(
+                                "{} | {}",
+                                self.filenames.get(left).unwrap_or(&String::from("")),
+                                self.filenames.get(right).unwrap_or(&String::from(""))
+                            )
+                        }
+                    } else {
+                        self.filenames
+                            .get(self.current_page)
+                            .cloned()
+                            .unwrap_or_else(|| String::from(""))
+                    };
+                    ui.label(file_label);
+                });
+            });
+        });
+    }
+
+    fn draw_bottom_bar(&mut self, ctx: &egui::Context, total_pages: usize) {
+        egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.add(egui::Slider::new(&mut self.zoom, 0.05..=10.0));
+                if ui.button("Reset Zoom").clicked() {
+                    self.zoom = 1.0;
+                    self.pan_offset = Vec2::ZERO;
+                    self.has_initialised_zoom = false;
+                    self.texture_cache.clear();
+                }
+                ui.separator();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Next").clicked() {
+                        self.current_page = (self.current_page + 1).min(self.filenames.len().saturating_sub(1));
+                    }
+                    if ui.button("Prev").clicked() {
+                        self.current_page = self.current_page.saturating_sub(1);
+                    }
+                    let page_label = if self.double_page_mode && self.current_page != 0 {
+                        let left = self.current_page;
+                        let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
+                        if self.right_to_left {
+                            format!("Page ({},{})/{}", right + 1, left + 1, total_pages)
+                        } else {
+                            format!("Page ({},{})/{}", left + 1, right + 1, total_pages)
+                        }
+                    } else {
+                        format!("Page {}/{}", self.current_page + 1, total_pages)
+                    };
+                    ui.label(page_label);
+                });
+            });
+        });
+    }
+
+    fn draw_central_image_area(&mut self, ctx: &egui::Context, total_pages: usize) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let image_area = ui.available_rect_before_wrap();
+
+            // Pan (drag to move image)
+            let response = ui.allocate_rect(image_area, egui::Sense::drag());
+            if response.drag_started() {
+                self.drag_start = response.interact_pointer_pos();
+            }
+            if response.dragged() {
+                if let Some(pos) = response.interact_pointer_pos() {
+                    if let Some(start) = self.drag_start {
+                        let delta = pos - start;
+                        self.pan_offset += delta;
+                        self.drag_start = Some(pos);
+                        self.texture_cache.clear();
+                    }
+                }
+            }
+            if response.drag_released() {
+                self.drag_start = None;
+            }
+
+            // Display images or spinner
+            if self.double_page_mode {
+                let page1 = self.current_page;
+                let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
+                let loaded1 = self.image_lru.lock().unwrap().get(&page1).cloned();
+                let loaded2 = if page2 != usize::MAX {
+                    self.image_lru.lock().unwrap().get(&page2).cloned()
+                } else {
+                    None
+                };
+
+                if let (Some(loaded1), Some(loaded2)) = (&loaded1, &loaded2) {
+                    if !self.has_initialised_zoom {
+                        self.reset_zoom(image_area, loaded1);
+                    }
+                    let left_first = !self.right_to_left;
+                    draw_dual_page(
+                        ui,
+                        loaded1,
+                        Some(loaded2),
+                        image_area,
+                        self.zoom,
+                        PAGE_MARGIN_SIZE as f32,
+                        left_first,
+                        self.pan_offset,
+                        &mut self.texture_cache,
+                    );
+                    let (w1, h1) = loaded1.image.dimensions();
+                    let (w2, h2) = loaded2.image.dimensions();
+                    let total_width = w1 + w2;
+                    let max_height = h1.max(h2);
+                    self.clamp_pan((total_width, max_height), image_area);
+                } else if let Some(loaded1) = &loaded1 {
+                    if !self.has_initialised_zoom {
+                        self.reset_zoom(image_area, loaded1);
+                    }
+                    draw_single_page(ui, loaded1, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
+                    self.clamp_pan(loaded1.image.dimensions(), image_area);
+                } else {
+                    draw_spinner(ui, image_area);
+                }
+            } else {
+                let loaded = self.image_lru.lock().unwrap().get(&self.current_page).cloned();
+                if let Some(loaded) = loaded {
+                    if !self.has_initialised_zoom {
+                        self.reset_zoom(image_area, &loaded);
+                    }
+                    draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
+                    self.clamp_pan(loaded.image.dimensions(), image_area);
+                } else {
+                    draw_spinner(ui, image_area);
+                }
+            }
+        });
+    }
 }
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        show_menu_bar(ctx, &mut self.on_open_comic, &mut self.on_open_folder);
-
         let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
         if let Some(file) = dropped_files.iter().find_map(|f| f.path.clone()) {
             let path = file.to_path_buf();
@@ -159,113 +344,6 @@ impl eframe::App for CBZViewerApp {
 
         let total_pages = self.filenames.len();
         let input = ctx.input(|i| i.clone());
-
-        // --- Overlay UI: always on top ---
-        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                let direction_label = if self.right_to_left { "R <- L" } else { "L -> R" };
-                if ui.button(direction_label)
-                    .on_hover_text("Reading direction")
-                    .clicked()
-                {
-                    self.right_to_left = !self.right_to_left;
-                    self.texture_cache.clear();
-                }
-
-                if ui.selectable_label(self.double_page_mode, "Dual")
-                    .on_hover_text("Show two pages at once, cover page will be excluded")
-                    .clicked()
-                {
-                    if self.double_page_mode {
-                        self.double_page_mode = false;
-                        self.current_page = self.current_page.min(total_pages.saturating_sub(1));
-                        self.has_initialised_zoom = false;
-                        self.texture_cache.clear();
-                    } else { 
-                        if self.current_page > 0 && self.current_page % 2 != 0 {
-                            self.current_page -= 1;
-                        }
-                        self.double_page_mode = true;
-                        self.has_initialised_zoom = false;
-                        self.texture_cache.clear();
-                    }
-                }
-
-                if self.double_page_mode {
-                    if ui.button("Bump")
-                        .on_hover_text("Bump over a single page, use this if there is misalignment")
-                        .clicked()
-                    {
-                        let total_pages = self.filenames.len();
-                        if self.current_page + 1 < total_pages {
-                            self.current_page += 1;
-                            self.has_initialised_zoom = false;
-                            self.texture_cache.clear();
-                        }
-                    }
-                }
-                
-                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                    let file_label = if self.double_page_mode && self.current_page != 0 {
-                        let left = self.current_page;
-                        let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
-                        if self.right_to_left {
-                            format!(
-                                "{} | {}",
-                                self.filenames.get(right).unwrap_or(&String::from("")),
-                                self.filenames.get(left).unwrap_or(&String::from(""))
-                            )
-                        } else {
-                            format!(
-                                "{} | {}",
-                                self.filenames.get(left).unwrap_or(&String::from("")),
-                                self.filenames.get(right).unwrap_or(&String::from(""))
-                            )
-                        }
-                    } else {
-                        self.filenames
-                            .get(self.current_page)
-                            .cloned()
-                            .unwrap_or_else(|| String::from(""))
-                    };
-                    ui.label(file_label);
-                });
-            });
-        });
-
-        egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.add(egui::Slider::new(&mut self.zoom, 0.05..=10.0));
-                if ui.button("Reset Zoom").clicked() {
-                    self.zoom = 1.0;
-                    self.pan_offset = Vec2::ZERO;
-                    self.has_initialised_zoom = false;
-                    self.texture_cache.clear();
-                }
-                ui.separator();
-                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Add your controls here, they will appear on the right side
-                    if ui.button("Next").clicked() {
-                        self.current_page = (self.current_page + 1).min(self.filenames.len().saturating_sub(1));
-                    }
-                    if ui.button("Prev").clicked() {
-                        self.current_page = self.current_page.saturating_sub(1);
-                    }
-                    let page_label = if self.double_page_mode && self.current_page != 0 {
-                        let left = self.current_page;
-                        let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
-                        if self.right_to_left {
-                            format!("Page ({},{})/{}", right + 1, left + 1, total_pages)
-                        } else {
-                            format!("Page ({},{})/{}", left + 1, right + 1, total_pages)
-                        }
-                    } else {
-                        format!("Page {}/{}", self.current_page + 1, total_pages)
-                    };
-                    ui.label(page_label);
-                });
-            });
-        });
 
         // --- Navigation logic (arrow keys) ---
         let (next_key, prev_key) = self.navigation_keys();
@@ -332,86 +410,9 @@ impl eframe::App for CBZViewerApp {
             );
         }
 
-        // --- Central image area (main viewer) ---
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let available_rect = ui.max_rect();
-            //let image_area = available_rect;
-            // let image_area = ui.available_size();
-            let image_area = ui.available_rect_before_wrap();
-
-            // --- Pan (drag to move image) ---
-            let response = ui.allocate_rect(image_area, egui::Sense::drag());
-            if response.drag_started() {
-                self.drag_start = response.interact_pointer_pos();
-            }
-            if response.dragged() {
-                if let Some(pos) = response.interact_pointer_pos() {
-                    if let Some(start) = self.drag_start {
-                        let delta = pos - start;
-                        self.pan_offset += delta;
-                        self.drag_start = Some(pos);
-                        self.texture_cache.clear();
-                    }
-                }
-            }
-            if response.drag_released() {
-                self.drag_start = None;
-            }
-
-            // --- Display images or spinner ---
-            if self.double_page_mode {
-                let page1 = self.current_page;
-                let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
-                let loaded1 = self.image_lru.lock().unwrap().get(&page1).cloned();
-                let loaded2 = if page2 != usize::MAX {
-                    self.image_lru.lock().unwrap().get(&page2).cloned()
-                } else {
-                    None
-                };
-
-                if let (Some(loaded1), Some(loaded2)) = (&loaded1, &loaded2) {
-                    if !self.has_initialised_zoom {
-                        self.reset_zoom(image_area, loaded1);
-                    }
-                    let left_first = !self.right_to_left;
-                    draw_dual_page(
-                        ui,
-                        loaded1,
-                        Some(loaded2),
-                        image_area,
-                        self.zoom,
-                        PAGE_MARGIN_SIZE as f32,
-                        left_first,
-                        self.pan_offset,
-                        &mut self.texture_cache,
-                    );
-                    // Clamp pan so at least a corner of the image is visible
-                    let (w1, h1) = loaded1.image.dimensions();
-                    let (w2, h2) = loaded2.image.dimensions();
-                    let total_width = w1 + w2;
-                    let max_height = h1.max(h2);
-                    self.clamp_pan((total_width, max_height), image_area);
-                } else if let Some(loaded1) = &loaded1 {
-                    if !self.has_initialised_zoom {
-                        self.reset_zoom(image_area, loaded1);
-                    }
-                    draw_single_page(ui, loaded1, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
-                    self.clamp_pan(loaded1.image.dimensions(), image_area);
-                } else {
-                    draw_spinner(ui, image_area);
-                }
-            } else {
-                let loaded = self.image_lru.lock().unwrap().get(&self.current_page).cloned();
-                if let Some(loaded) = loaded {
-                    if !self.has_initialised_zoom {
-                        self.reset_zoom(image_area, &loaded);
-                    }
-                    draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
-                    self.clamp_pan(loaded.image.dimensions(), image_area);
-                } else {
-                    draw_spinner(ui, image_area);
-                }
-            }
-        });
+        self.draw_central_image_area(ctx, total_pages);
+        show_menu_bar(ctx, &mut self.on_open_comic, &mut self.on_open_folder);
+        self.draw_top_bar(ctx, total_pages);
+        self.draw_bottom_bar(ctx, total_pages);
     }
 }
