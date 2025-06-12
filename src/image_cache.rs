@@ -1,3 +1,5 @@
+use crate::archive::ImageArchive;
+use crate::error::AppError;
 use image::{DynamicImage, GenericImageView};
 use eframe::egui;
 use lru::LruCache;
@@ -49,39 +51,41 @@ pub fn new_image_cache(size: usize) -> SharedImageCache {
 pub fn load_image_async(
     page: usize,
     filenames: Vec<String>,
-    zip_path: std::path::PathBuf,
+    archive: Arc<Mutex<ImageArchive>>,
     image_lru: SharedImageCache,
     loading_pages: Arc<Mutex<std::collections::HashSet<usize>>>,
-) {
+) -> Result<(), AppError> {
     {
         let mut loading = loading_pages.lock().unwrap();
         if loading.contains(&page) {
-            return;
+            return Ok(());
         }
         loading.insert(page);
     }
 
     if image_lru.lock().unwrap().get(&page).is_some() {
         loading_pages.lock().unwrap().remove(&page);
-        return;
+        return Ok(());
     }
 
+    let filenames_clone = filenames.clone();
+    let archive = archive.clone();
+    let image_lru = image_lru.clone();
+    let loading_pages = loading_pages.clone();
+
     std::thread::spawn(move || {
-        let mut archive = ZipArchive::new(File::open(&zip_path).unwrap()).unwrap();
-        let mut file = archive.by_name(&filenames[page]).unwrap();
-        let size = file.size();
-
-        let mut buf = Vec::with_capacity(size as usize);
-        let mut tmp = [0u8; 8192];
-
-        while let Ok(n) = file.read(&mut tmp) {
-            if n == 0 {
-                break;
+        let filename = &filenames_clone[page];
+        let mut archive = archive.lock().unwrap();
+        let buf = match archive.read_image(filename) {
+            Ok(data) => data,
+            Err(e) => {
+                log::warn!("Failed to read image: {e}");
+                loading_pages.lock().unwrap().remove(&page);
+                return;
             }
-            buf.extend_from_slice(&tmp[..n]);
-        }
+        };
 
-        let lower = filenames[page].to_lowercase();
+        let lower = filenames_clone[page].to_lowercase();
         let loaded_page = if lower.ends_with(".gif") {
             info!("Decoding GIF for page {}", page);
             match gif::DecodeOptions::new().read_info(&*buf) {
@@ -196,7 +200,7 @@ pub fn load_image_async(
                     if !frames.is_empty() {
                         LoadedPage {
                             index: page,
-                            filename: filenames[page].clone(),
+                            filename: filenames_clone[page].clone(),
                             image: PageImage::AnimatedGif {
                                 frames,
                                 delays,
@@ -208,7 +212,7 @@ pub fn load_image_async(
                         let img = image::load_from_memory(&buf).unwrap();
                         LoadedPage {
                             index: page,
-                            filename: filenames[page].clone(),
+                            filename: filenames_clone[page].clone(),
                             image: PageImage::Static(img),
                         }
                     }
@@ -218,7 +222,7 @@ pub fn load_image_async(
                     let img = image::load_from_memory(&buf).unwrap();
                     LoadedPage {
                         index: page,
-                        filename: filenames[page].clone(),
+                        filename: filenames_clone[page].clone(),
                         image: PageImage::Static(img),
                     }
                 }
@@ -227,11 +231,13 @@ pub fn load_image_async(
             let img = image::load_from_memory(&buf).unwrap();
             LoadedPage {
                 index: page,
-                filename: filenames[page].clone(),
+                filename: filenames_clone[page].clone(),
                 image: PageImage::Static(img),
             }
         };
         image_lru.lock().unwrap().put(page, loaded_page);
         loading_pages.lock().unwrap().remove(&page);
     });
+
+    Ok(())
 }

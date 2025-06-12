@@ -1,7 +1,9 @@
+use crate::archive::ImageArchive;
+use crate::error::AppError;
 use crate::config::*;
 use crate::image_cache::{load_image_async, new_image_cache, LoadedPage, PageImage, SharedImageCache};
 use crate::texture_cache::TextureCache;
-use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
+use crate::ui::{draw_single_page, draw_dual_page, draw_spinner, show_menu_bar};
 
 use eframe::{egui::{self, Vec2, Rect, Layout, pos2}, App};
 use std::collections::HashSet;
@@ -9,7 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 
 pub struct CBZViewerApp {
-    pub zip_path: PathBuf,
+    pub archive_path: PathBuf,
+    pub archive: Arc<Mutex<ImageArchive>>,
     pub image_lru: SharedImageCache,
     pub filenames: Vec<String>,
     pub current_page: usize,
@@ -22,30 +25,19 @@ pub struct CBZViewerApp {
     pub right_to_left: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
     pub texture_cache: TextureCache,
+    pub on_open_comic: bool,
+    pub on_open_folder: bool,
 }
 
 impl CBZViewerApp {
-    pub fn new(zip_path: PathBuf) -> Self {
-        let file = std::fs::File::open(&zip_path).unwrap();
-        let mut archive = zip::ZipArchive::new(file).unwrap();
-        let mut names = Vec::new();
-        for i in 0..archive.len() {
-            if let Ok(file) = archive.by_index(i) {
-                let name = file.name().to_string();
-                let lower = name.to_lowercase();
-                if [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"]
-                    .iter()
-                    .any(|ext| lower.ends_with(ext))
-                {
-                    names.push(name);
-                }
-            }
-        }
-        names.sort_by_key(|n| n.to_lowercase());
+    pub fn new(archive_path: PathBuf) -> Result<Self, AppError> {
+        let archive = Arc::new(Mutex::new(ImageArchive::process(&archive_path)?));
+        let filenames = archive.lock().unwrap().image_names();
 
-        Self {
-            zip_path,
-            filenames: names,
+        Ok(Self {
+            archive_path,
+            archive,
+            filenames,
             image_lru: new_image_cache(CACHE_SIZE),
             current_page: 0,
             loading_thread: None,
@@ -57,7 +49,9 @@ impl CBZViewerApp {
             right_to_left: DEFAULT_RIGHT_TO_LEFT,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
             texture_cache: TextureCache::new(),
-        }
+            on_open_comic: false,
+            on_open_folder: false,
+        })
     }
 
     fn reset_zoom(&mut self, image_area: Rect, loaded: &LoadedPage) {
@@ -80,7 +74,7 @@ impl CBZViewerApp {
 
     /// Clamp pan so at least a corner of the image is visible
     fn clamp_pan(&mut self, image_size: (u32, u32), area: egui::Rect) {
-        let border = 20.0; // Minimum visible border of the image in pixels
+        let border = BORDER_SIZE;
         
         let (img_w, img_h) = (image_size.0 as f32 * self.zoom, image_size.1 as f32 * self.zoom);
         let win_w = area.width();
@@ -114,13 +108,36 @@ impl CBZViewerApp {
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        show_menu_bar(ctx, &mut self.on_open_comic, &mut self.on_open_folder);
+
         let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
         if let Some(file) = dropped_files.iter().find_map(|f| f.path.clone()) {
             let path = file.to_path_buf();
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-            if ext == "cbz" || ext == "zip" {
-                // Re-initialize the app with the new file
-                *self = CBZViewerApp::new(path);
+            if ext == "cbz" || ext == "zip" || path.is_dir() {
+                match CBZViewerApp::new(path) {
+                    Ok(new_app) => {
+                        *self = new_app;
+                    }
+                    Err(e) => {
+                        // You can show a dialog, toast, or log the error here
+                        log::error!("Failed to open archive: {e}");
+                        // Optionally, store the error in the app state to display in the UI
+                    }
+                }
+            }
+        }
+
+        if self.on_open_comic {
+            self.on_open_comic = false;
+            if let Some(path) = rfd::FileDialog::new().add_filter("Comic Book Archive", &["cbz", "zip"]).pick_file() {
+                // handle opening comic
+            }
+        }
+        if self.on_open_folder {
+            self.on_open_folder = false;
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                // handle opening folder
             }
         }
 
@@ -282,35 +299,35 @@ impl eframe::App for CBZViewerApp {
 
         // --- Preload images for current view (and next page for smooth navigation) ---
         if self.double_page_mode {
-            load_image_async(
+            let _ = load_image_async(
                 self.current_page,
                 self.filenames.clone(),
-                self.zip_path.clone(),
+                self.archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
             );
             if self.current_page != 0 && self.current_page + 1 < total_pages {
-                load_image_async(
+                let _ = load_image_async(
                     self.current_page + 1,
                     self.filenames.clone(),
-                    self.zip_path.clone(),
+                    self.archive.clone(),
                     self.image_lru.clone(),
                     self.loading_pages.clone(),
                 );
             }
         } else {
-            load_image_async(
+            let _ = load_image_async(
                 self.current_page,
                 self.filenames.clone(),
-                self.zip_path.clone(),
+                self.archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
             );
             if self.current_page + 1 < total_pages {
-                load_image_async(
+                let _ = load_image_async(
                     self.current_page + 1,
                     self.filenames.clone(),
-                    self.zip_path.clone(),
+                    self.archive.clone(),
                     self.image_lru.clone(),
                     self.loading_pages.clone(),
                 );

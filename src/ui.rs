@@ -2,6 +2,7 @@ use eframe::egui::{self, pos2, Ui, Vec2, Rect, Image, Spinner, Color32};
 use image::GenericImageView;
 use crate::image_cache::{LoadedPage, PageImage};
 use log::{info, debug, warn};
+use eframe::egui::{TopBottomPanel, menu, Context};
 
 /// Draw a centered spinner in the given area
 pub fn draw_spinner(ui: &mut Ui, area: Rect) {
@@ -321,4 +322,26 @@ fn draw_gif_at_rect(
         });
         ui.ctx().request_repaint();
     }
+}
+
+/// Call this at the start of your update() function in app.rs
+pub fn show_menu_bar(
+    ctx: &Context,
+    on_open_comic: &mut bool,
+    on_open_folder: &mut bool,
+) {
+    TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+        menu::bar(ui, |ui| {
+            ui.menu_button("File", |ui| {
+                if ui.button("Open Comic...").clicked() {
+                    *on_open_comic = true;
+                    ui.close_menu();
+                }
+                if ui.button("Open Folder...").clicked() {
+                    *on_open_folder = true;
+                    ui.close_menu();
+                }
+            });
+        });
+    });
 }
