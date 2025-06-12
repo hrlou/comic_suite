@@ -58,12 +58,14 @@ pub fn load_image_async(
     {
         let mut loading = loading_pages.lock().unwrap();
         if loading.contains(&page) {
+            log::debug!("Image page {} is already being loaded (skipping)", page);
             return Ok(());
         }
         loading.insert(page);
     }
 
     if image_lru.lock().unwrap().get(&page).is_some() {
+        log::debug!("Image page {} is already in LRU cache (hit)", page);
         loading_pages.lock().unwrap().remove(&page);
         return Ok(());
     }
@@ -235,7 +237,13 @@ pub fn load_image_async(
                 image: PageImage::Static(img),
             }
         };
-        image_lru.lock().unwrap().put(page, loaded_page);
+        // Insert into LRU cache and log
+        let mut lru = image_lru.lock().unwrap();
+        let old = lru.put(page, loaded_page);
+        if old.is_some() {
+            log::debug!("Evicted image page {} from LRU cache", page);
+        }
+        log::debug!("Loaded image page {} into LRU cache", page);
         loading_pages.lock().unwrap().remove(&page);
     });
 

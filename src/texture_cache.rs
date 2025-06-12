@@ -19,6 +19,7 @@ pub struct TextureCache {
 
 impl TextureCache {
     pub fn new() -> Self {
+        debug!("TextureCache created");
         Self { single: None, dual: None }
     }
 
@@ -45,5 +46,7 @@ impl TextureCache {
         debug!("TextureCache cleared");
         self.single = None;
         self.dual = None;
+        // When clearing the image LRU cache:
+        log::debug!("Image LRU cache cleared");
     }
 }

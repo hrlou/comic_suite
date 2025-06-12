@@ -23,7 +23,7 @@ fn pick_comic() -> Option<PathBuf> {
 fn main() {
     // Initialize logging (to file and console)
     env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
+        // .filter_level(log::LevelFilter::Debug)
         .format_timestamp_secs()
         .init();
 

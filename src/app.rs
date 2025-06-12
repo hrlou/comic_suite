@@ -131,13 +131,29 @@ impl eframe::App for CBZViewerApp {
         if self.on_open_comic {
             self.on_open_comic = false;
             if let Some(path) = rfd::FileDialog::new().add_filter("Comic Book Archive", &["cbz", "zip"]).pick_file() {
-                // handle opening comic
+                match CBZViewerApp::new(path) {
+                    Ok(new_app) => {
+                        *self = new_app;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to open archive: {e}");
+                    }
+                }
+                return; // Prevent further update with old state
             }
         }
         if self.on_open_folder {
             self.on_open_folder = false;
             if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                // handle opening folder
+                match CBZViewerApp::new(path) {
+                    Ok(new_app) => {
+                        *self = new_app;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to open folder: {e}");
+                    }
+                }
+                return;
             }
         }
 
@@ -298,40 +314,22 @@ impl eframe::App for CBZViewerApp {
         }
 
         // --- Preload images for current view (and next page for smooth navigation) ---
-        if self.double_page_mode {
+        let total_pages = self.filenames.len();
+        let mut pages_to_preload = vec![self.current_page];
+        for offset in 1..=READ_AHEAD {
+            let next = self.current_page + offset;
+            if next < total_pages {
+                pages_to_preload.push(next);
+            }
+        }
+        for &page in &pages_to_preload {
             let _ = load_image_async(
-                self.current_page,
+                page,
                 self.filenames.clone(),
                 self.archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
             );
-            if self.current_page != 0 && self.current_page + 1 < total_pages {
-                let _ = load_image_async(
-                    self.current_page + 1,
-                    self.filenames.clone(),
-                    self.archive.clone(),
-                    self.image_lru.clone(),
-                    self.loading_pages.clone(),
-                );
-            }
-        } else {
-            let _ = load_image_async(
-                self.current_page,
-                self.filenames.clone(),
-                self.archive.clone(),
-                self.image_lru.clone(),
-                self.loading_pages.clone(),
-            );
-            if self.current_page + 1 < total_pages {
-                let _ = load_image_async(
-                    self.current_page + 1,
-                    self.filenames.clone(),
-                    self.archive.clone(),
-                    self.image_lru.clone(),
-                    self.loading_pages.clone(),
-                );
-            }
         }
 
         // --- Central image area (main viewer) ---
