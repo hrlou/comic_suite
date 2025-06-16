@@ -1,11 +1,12 @@
 //! Main application state and logic.
 
-use crate::archive::ImageArchive;
+use crate::archive::{self, ImageArchive};
 use crate::cache::{SharedImageCache, TextureCache, new_image_cache, load_image_async, LoadedPage, PageImage};
 use crate::ui::{draw_single_page, draw_dual_page, draw_spinner, log::UiLogger};
 use crate::config::*;
 use crate::error::AppError;
 
+use eframe::epaint::tessellator::Path;
 use eframe::{egui::{self, Vec2, Rect, Layout, pos2}, App};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -29,7 +30,8 @@ pub struct CBZViewerApp {
     pub right_to_left: bool,
     pub has_initialised_zoom: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
-    // Add any other fields you need
+    pub on_open_comic: bool,
+    pub on_open_folder: bool,
 }
 
 impl CBZViewerApp {
@@ -50,18 +52,22 @@ impl CBZViewerApp {
             right_to_left: DEFAULT_RIGHT_TO_LEFT,
             has_initialised_zoom: false,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
+            on_open_comic: false,
+            on_open_folder: false,
         };
         if let Some(path) = path {
             let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
-            let filenames = archive.lock().unwrap().list_images();
-            if filenames.is_empty() { 
-                return Err(AppError::NoImages);
+            if let Ok(guard) = archive.lock() {
+                let filenames = guard.list_images();
+                if filenames.is_empty() { 
+                    return Err(AppError::NoImages);
+                }
+                app.filenames = Some(filenames);
             }
-            self.archive_path = Some(path);
-            self.archive = Some(archive);
-            self.filenames = Some(filenames);
+            app.archive_path = Some(path);
+            app.archive = Some(Arc::clone(&archive));
         }
-        todo!()
+        Ok(app)
     }
 
     // Example: Reset zoom logic
@@ -95,18 +101,26 @@ impl CBZViewerApp {
 
     /// Go to the next page (with bounds checking).
     pub fn goto_next_page(&mut self) {
-        if self.current_page + 1 < self.filenames.len() {
-            self.current_page += 1;
-            self.on_page_changed();
+        if let Some(filenames) = &self.filenames {
+            if self.current_page + 1 < filenames.len() {
+                self.current_page += 1;
+                self.on_page_changed();
+            }
+        } else {
+            log::warn!("No filenames available to go to next page.");
         }
     }
 
     /// Go to a specific page (with bounds checking).
     pub fn goto_page(&mut self, page: usize) {
-        let page = page.min(self.filenames.len().saturating_sub(1));
-        if self.current_page != page {
-            self.current_page = page;
-            self.on_page_changed();
+        if let Some(filenames) = &self.filenames {
+            if page >= filenames.len() {
+                log::warn!("Requested page {} is out of bounds (max: {}).", page, filenames.len() - 1);
+                return;
+            }
+        } else {
+            log::warn!("No filenames available to go to specific page.");
+            return;
         }
     }
 
@@ -116,74 +130,106 @@ impl CBZViewerApp {
         self.texture_cache.clear();
         self.pan_offset = Vec2::ZERO;
     }
+
+    pub fn handle_menu_bar_file(&mut self) {
+        if self.on_open_comic {
+            self.on_open_comic = false;
+            if let Some(path) = rfd::FileDialog::new().add_filter("Comic Book Archive", &["cbz", "zip"]).pick_file() {
+                match CBZViewerApp::new(Some(path)) {
+                    Ok(new_app) => {
+                        *self = new_app;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to open archive: {e}");
+                    }
+                }
+                return; // Prevent further update with old state
+            }
+        }
+        if self.on_open_folder {
+            self.on_open_folder = false;
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                match CBZViewerApp::new(Some(path)) {
+                    Ok(new_app) => {
+                        *self = new_app;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to open folder: {e}");
+                    }
+                }
+                return;
+            }
+        }
+    }
 }
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let total_pages = self.filenames.len();
-        
-        // Must be first; underneath all other UI elements
-        crate::ui::layout::draw_central_image_area(self, ctx, total_pages);
+        let mut total_pages = 0;
+
+        if let Some(archive) = self.archive.as_ref() {
+            let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
+            // if let Some(filenames) = &self.filenames {
+            //     // Must be first; underneath all other UI elements
+            //     total_pages = filenames.len();
+            // } else {
+            //     log::warn!("No archive available to display.");
+            // }
+            let filenames = self.filenames.clone().unwrap_or_default();
+            total_pages = filenames.len();
+
+            crate::ui::layout::draw_central_image_area(self, ctx, total_pages);
+
+            // Mouse wheel zoom
+            handle_zoom(
+                &mut self.zoom,
+                ctx,
+                0.05,
+                10.0,
+                &mut self.texture_cache,
+                &mut self.has_initialised_zoom,
+            );
+
+            // Preload images for current view and next pages
+            let mut pages_to_preload = vec![self.current_page];
+            for offset in 1..=READ_AHEAD {
+                let next = self.current_page + offset;
+                if next < total_pages {
+                    pages_to_preload.push(next);
+                }
+            }
+            for &page in &pages_to_preload {
+                let _ = load_image_async(
+                    page,
+                    filenames.clone(),
+                    archive.clone(),
+                    self.image_lru.clone(),
+                    self.loading_pages.clone(),
+                );
+            }
+
+            // --- Zoom with mouse wheel ---
+            let input = ctx.input(|i| i.clone());
+            if input.raw_scroll_delta.y != 0.0 {
+                let zoom_factor = 1.1_f32.powf(input.raw_scroll_delta.y / 10.0);
+                self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
+                self.texture_cache.clear();
+            }
+
+            // Keyboard navigation
+            if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+                self.goto_next_page();
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+                self.goto_prev_page();
+            }
+        }
+        // Menu bar
+        crate::ui::layout::draw_menu_bar(self, ctx);
+        self.handle_menu_bar_file();
         
         // Draw the top and bottom bars
         crate::ui::layout::draw_top_bar(self, ctx, total_pages);
         crate::ui::layout::draw_bottom_bar(self, ctx, total_pages);
-
-        // Mouse wheel zoom
-        handle_zoom(
-            &mut self.zoom,
-            ctx,
-            0.05,
-            10.0,
-            &mut self.texture_cache,
-            &mut self.has_initialised_zoom,
-        );
-
-        // Pan (drag to move image)
-        // You need to pass the correct area (Rect) for your image.
-        // For example, if you have it as `let image_area = ...;`:
-        // crate::ui::image::handle_pan(&mut self.pan_offset, &mut self.drag_start, &mut self.ima, &mut self.texture_cache);
-
-
-        // Optionally, show log messages at the bottom
-        // egui::TopBottomPanel::bottom("log_bar").show(ctx, |ui| {
-        //     for msg in self.ui_logger.messages() {
-        //         ui.colored_label(egui::Color32::YELLOW, msg);
-        //     }
-        // });
-
-        // Preload images for current view and next pages
-        let mut pages_to_preload = vec![self.current_page];
-        for offset in 1..=READ_AHEAD {
-            let next = self.current_page + offset;
-            if next < total_pages {
-                pages_to_preload.push(next);
-            }
-        }
-        for &page in &pages_to_preload {
-            let _ = load_image_async(
-                page,
-                self.filenames.clone(),
-                self.archive.clone(),
-                self.image_lru.clone(),
-                self.loading_pages.clone(),
-            );
-        }
-
-        // --- Zoom with mouse wheel ---
-        let input = ctx.input(|i| i.clone());
-        if input.raw_scroll_delta.y != 0.0 {
-            let zoom_factor = 1.1_f32.powf(input.raw_scroll_delta.y / 10.0);
-            self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
-            self.texture_cache.clear();
-        }
-
-        // Keyboard navigation
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
-            self.goto_next_page();
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
-            self.goto_prev_page();
-        }
     }
 }

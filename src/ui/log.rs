@@ -2,44 +2,45 @@
 
 use std::sync::{Arc, Mutex};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UiLogLevel {
+    Warning,
+    Error,
+    Info,
+}
 /// Logger that pushes warnings and errors to both log and UI.
 #[derive(Clone)]
 pub struct UiLogger {
-    pub buffer: Arc<Mutex<Vec<String>>>,
+    pub message: Option<(String, UiLogLevel)>,
 }
+
 
 impl UiLogger {
     /// Create a new UI logger.
     pub fn new() -> Self {
         Self {
-            buffer: Arc::new(Mutex::new(Vec::new())),
+            message: None,
         }
     }
 
     /// Log a warning (to log and UI).
-    pub fn warn(&self, msg: impl Into<String>) {
+    pub fn warn(&mut self, msg: impl Into<String>) {
         let msg = msg.into();
         log::warn!("{}", msg);
-        let mut buf = self.buffer.lock().unwrap();
-        buf.push(format!("Warning: {}", msg));
-        if buf.len() > 10 {
-            buf.remove(0);
-        }
+        self.message = Some((msg, UiLogLevel::Warning));
     }
 
     /// Log an error (to log and UI).
-    pub fn error(&self, msg: impl Into<String>) {
+    pub fn error(&mut self, msg: impl Into<String>) {
         let msg = msg.into();
         log::error!("{}", msg);
-        let mut buf = self.buffer.lock().unwrap();
-        buf.push(format!("Error: {}", msg));
-        if buf.len() > 10 {
-            buf.remove(0);
-        }
+        self.message = Some((msg, UiLogLevel::Error));
     }
 
     /// Get all messages for display.
-    pub fn messages(&self) -> Vec<String> {
-        self.buffer.lock().unwrap().clone()
+    pub fn info(&mut self, msg: impl Into<String>) {
+        let msg = msg.into();
+        log::info!("{}", msg);
+        self.message = Some((msg, UiLogLevel::Info));
     }
 }

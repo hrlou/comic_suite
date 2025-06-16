@@ -5,6 +5,23 @@ use crate::app::CBZViewerApp;
 use crate::config::PAGE_MARGIN_SIZE;
 use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
 
+pub fn draw_menu_bar(app: &mut CBZViewerApp, ctx: &Context) {
+    egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+        egui::menu::bar(ui, |ui| {
+            ui.menu_button("File", |ui| {
+                if ui.button("Open Comic...").clicked() {
+                    app.on_open_comic = true;
+                    ui.close_menu();
+                }
+                if ui.button("Open Folder...").clicked() {
+                    app.on_open_folder = true;
+                    ui.close_menu();
+                }
+            });
+        });
+    });
+}
+
 /// Draw the top bar (navigation, mode toggles, file info).
 pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
@@ -51,29 +68,29 @@ pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
             }
             
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                let file_label = if app.double_page_mode && app.current_page != 0 {
-                    let left = app.current_page;
-                    let right = (app.current_page + 1).min(total_pages.saturating_sub(1));
-                    if app.right_to_left {
-                        format!(
-                            "{} | {}",
-                            app.filenames.get(right).unwrap_or(&String::from("")),
-                            app.filenames.get(left).unwrap_or(&String::from(""))
-                        )
-                    } else {
-                        format!(
-                            "{} | {}",
-                            app.filenames.get(left).unwrap_or(&String::from("")),
-                            app.filenames.get(right).unwrap_or(&String::from(""))
-                        )
-                    }
-                } else {
-                    app.filenames
-                        .get(app.current_page)
-                        .cloned()
-                        .unwrap_or_else(|| String::from(""))
-                };
-                ui.label(file_label);
+                // let file_label = if app.double_page_mode && app.current_page != 0 {
+                //     let left = app.current_page;
+                //     let right = (app.current_page + 1).min(total_pages.saturating_sub(1));
+                //     if app.right_to_left {
+                //         format!(
+                //             "{} | {}",
+                //             app.filenames.get(right).unwrap_or(&String::from("")),
+                //             app.filenames.get(left).unwrap_or(&String::from(""))
+                //         )
+                //     } else {
+                //         format!(
+                //             "{} | {}",
+                //             app.filenames.get(left).unwrap_or(&String::from("")),
+                //             app.filenames.get(right).unwrap_or(&String::from(""))
+                //         )
+                //     }
+                // } else {
+                //     app.filenames
+                //         .get(app.current_page)
+                //         .cloned()
+                //         .unwrap_or_else(|| String::from(""))
+                // };
+                // ui.label(file_label);
             });
         });
     });
@@ -91,6 +108,7 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize
                 app.texture_cache.clear();
             }
             ui.separator();
+            
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Next").clicked() {
                     app.goto_next_page();
@@ -110,6 +128,16 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize
                     format!("Page {}/{}", app.current_page + 1, total_pages)
                 };
                 ui.label(page_label);
+            
+                if let Some((msg, kind)) = &app.ui_logger.message {
+                    ui.separator();
+                    let color = match *kind{
+                        crate::ui::UiLogLevel::Info => egui::Color32::WHITE,
+                        crate::ui::UiLogLevel::Warning => egui::Color32::YELLOW,
+                        crate::ui::UiLogLevel::Error => egui::Color32::RED,
+                    };
+                    ui.colored_label(color, msg.clone());
+                }
             });
         });
     });
