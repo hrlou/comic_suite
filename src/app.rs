@@ -1,423 +1,158 @@
+//! Main application state and logic.
+
 use crate::archive::ImageArchive;
-use crate::error::AppError;
+use crate::cache::{SharedImageCache, TextureCache, new_image_cache, load_image_async, LoadedPage, PageImage};
+use crate::ui::{draw_single_page, draw_dual_page, draw_spinner, log::UiLogger};
 use crate::config::*;
-use crate::image_cache::{load_image_async, new_image_cache, LoadedPage, PageImage, SharedImageCache};
-use crate::texture_cache::TextureCache;
-use crate::ui::{draw_single_page, draw_dual_page, draw_spinner, show_menu_bar};
+use crate::error::AppError;
 
 use eframe::{egui::{self, Vec2, Rect, Layout, pos2}, App};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 
+use crate::ui::image::{handle_zoom, handle_pan};
+
+/// The main application struct, holding all state.
 pub struct CBZViewerApp {
-    pub archive_path: PathBuf,
-    pub archive: Arc<Mutex<ImageArchive>>,
+    pub archive_path: Option<PathBuf>,
+    pub archive: Option<Arc<Mutex<ImageArchive>>>,
+    pub filenames: Option<Vec<String>>,
     pub image_lru: SharedImageCache,
-    pub filenames: Vec<String>,
     pub current_page: usize,
-    pub loading_thread: Option<std::thread::JoinHandle<()>>,
+    pub texture_cache: TextureCache,
+    pub ui_logger: UiLogger,
     pub zoom: f32,
     pub pan_offset: Vec2,
     pub drag_start: Option<egui::Pos2>,
-    pub has_initialised_zoom: bool,
     pub double_page_mode: bool,
     pub right_to_left: bool,
+    pub has_initialised_zoom: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
-    pub texture_cache: TextureCache,
-    pub on_open_comic: bool,
-    pub on_open_folder: bool,
+    // Add any other fields you need
 }
 
 impl CBZViewerApp {
-    pub fn new(archive_path: PathBuf) -> Result<Self, AppError> {
-        let archive = Arc::new(Mutex::new(ImageArchive::process(&archive_path)?));
-        let filenames = archive.lock().unwrap().image_names();
-
-        Ok(Self {
-            archive_path,
-            archive,
-            filenames,
+    /// Create a new app instance from a given archive path.
+    pub fn new(path: Option<PathBuf>) -> Result<Self, AppError> {
+        let mut app = Self {
+            archive_path: None,
+            archive: None,
+            filenames: None,
             image_lru: new_image_cache(CACHE_SIZE),
             current_page: 0,
-            loading_thread: None,
+            texture_cache: TextureCache::new(),
+            ui_logger: UiLogger::new(),
             zoom: 1.0,
             pan_offset: Vec2::ZERO,
             drag_start: None,
-            has_initialised_zoom: false,
             double_page_mode: DEFAULT_DUAL_PAGE_MODE,
             right_to_left: DEFAULT_RIGHT_TO_LEFT,
+            has_initialised_zoom: false,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
-            texture_cache: TextureCache::new(),
-            on_open_comic: false,
-            on_open_folder: false,
-        })
+        };
+        if let Some(path) = path {
+            let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
+            let filenames = archive.lock().unwrap().list_images();
+            if filenames.is_empty() { 
+                return Err(AppError::NoImages);
+            }
+            self.archive_path = Some(path);
+            self.archive = Some(archive);
+            self.filenames = Some(filenames);
+        }
+        todo!()
     }
 
-    fn reset_zoom(&mut self, image_area: Rect, loaded: &LoadedPage) {
+    // Example: Reset zoom logic
+    pub fn reset_zoom(&mut self, area: Rect, loaded: &LoadedPage) {
         let (w, h) = loaded.image.dimensions();
-        let zoom_x = image_area.width() / w as f32;
-        let zoom_y = image_area.height() / h as f32;
-        self.zoom = zoom_x.min(zoom_y).min(1.0);
+        let avail = area.size();
+        let scale_x = avail.x / w as f32;
+        let scale_y = avail.y / h as f32;
+        self.zoom = scale_x.min(scale_y).min(1.0);
         self.pan_offset = Vec2::ZERO;
         self.has_initialised_zoom = true;
+    }
+
+    // Example: Clamp pan logic
+    pub fn clamp_pan(&mut self, image_dims: (u32, u32), area: Rect) {
+        let (w, h) = image_dims;
+        let avail = area.size();
+        let max_x = ((w as f32 * self.zoom - avail.x) / 2.0).max(0.0);
+        let max_y = ((h as f32 * self.zoom - avail.y) / 2.0).max(0.0);
+        self.pan_offset.x = self.pan_offset.x.clamp(-max_x, max_x);
+        self.pan_offset.y = self.pan_offset.y.clamp(-max_y, max_y);
+    }
+
+    /// Go to the previous page (with bounds checking).
+    pub fn goto_prev_page(&mut self) {
+        if self.current_page > 0 {
+            self.current_page -= 1;
+            self.on_page_changed();
+        }
+    }
+
+    /// Go to the next page (with bounds checking).
+    pub fn goto_next_page(&mut self) {
+        if self.current_page + 1 < self.filenames.len() {
+            self.current_page += 1;
+            self.on_page_changed();
+        }
+    }
+
+    /// Go to a specific page (with bounds checking).
+    pub fn goto_page(&mut self, page: usize) {
+        let page = page.min(self.filenames.len().saturating_sub(1));
+        if self.current_page != page {
+            self.current_page = page;
+            self.on_page_changed();
+        }
+    }
+
+    /// Called whenever the page changes: resets zoom, pan, and clears texture cache.
+    pub fn on_page_changed(&mut self) {
+        self.has_initialised_zoom = false;
         self.texture_cache.clear();
-    }
-
-    fn navigation_keys(&self) -> (egui::Key, egui::Key) {
-        if READING_DIRECTION_AFFECTS_ARROWS && self.right_to_left {
-            (egui::Key::ArrowLeft, egui::Key::ArrowRight)
-        } else {
-            (egui::Key::ArrowRight, egui::Key::ArrowLeft)
-        }
-    }
-
-    /// Clamp pan so at least a corner of the image is visible
-    fn clamp_pan(&mut self, image_size: (u32, u32), area: egui::Rect) {
-        let border = BORDER_SIZE;
-        
-        let (img_w, img_h) = (image_size.0 as f32 * self.zoom, image_size.1 as f32 * self.zoom);
-        let win_w = area.width();
-        let win_h = area.height();
-        
-        // The image's center is at pan_offset = (0,0)
-        // Allow panning, but always keep at least `border` pixels of the image visible
-        
-        let half_w = win_w / 2.0;
-        let half_h = win_h / 2.0;
-        let half_img_w = img_w / 2.0;
-        let half_img_h = img_h / 2.0;
-        
-        let max_pan_x = (half_img_w - half_w + border).max(0.0);
-        let max_pan_y = (half_img_h - half_h + border).max(0.0);
-        
-        // If the image is smaller than the viewport, allow panning within the border margin
-        if img_w + border * 2.0 <= win_w {
-            self.pan_offset.x = self.pan_offset.x.clamp(-(win_w/2.0 - half_img_w - border), win_w/2.0 - half_img_w - border);
-        } else {
-            self.pan_offset.x = self.pan_offset.x.clamp(-max_pan_x, max_pan_x);
-        }
-    
-        if img_h + border * 2.0 <= win_h {
-            self.pan_offset.y = self.pan_offset.y.clamp(-(win_h/2.0 - half_img_h - border), win_h/2.0 - half_img_h - border);
-        } else {
-            self.pan_offset.y = self.pan_offset.y.clamp(-max_pan_y, max_pan_y);
-        }
-    }
-
-    fn draw_direction_button(&mut self, ui: &mut egui::Ui) {
-        let direction_label = if self.right_to_left { "R <- L" } else { "L -> R" };
-        if ui.button(direction_label)
-            .on_hover_text("Reading direction")
-            .clicked()
-        {
-            self.right_to_left = !self.right_to_left;
-            self.texture_cache.clear();
-        }
-    }
-
-    fn draw_dual_page_toggle(&mut self, ui: &mut egui::Ui, total_pages: usize) {
-        if ui.selectable_label(self.double_page_mode, "Dual")
-            .on_hover_text("Show two pages at once, cover page will be excluded")
-            .clicked()
-        {
-            if self.double_page_mode {
-                self.double_page_mode = false;
-                self.current_page = self.current_page.min(total_pages.saturating_sub(1));
-                self.has_initialised_zoom = false;
-                self.texture_cache.clear();
-            } else { 
-                if self.current_page > 0 && self.current_page % 2 != 0 {
-                    self.current_page -= 1;
-                }
-                self.double_page_mode = true;
-                self.has_initialised_zoom = false;
-                self.texture_cache.clear();
-            }
-        }
-    }
-
-    fn draw_bump_button(&mut self, ui: &mut egui::Ui, total_pages: usize) {
-        if self.double_page_mode {
-            if ui.button("Bump")
-                .on_hover_text("Bump over a single page, use this if there is misalignment")
-                .clicked()
-            {
-                if self.current_page + 1 < total_pages {
-                    self.current_page += 1;
-                    self.has_initialised_zoom = false;
-                    self.texture_cache.clear();
-                }
-            }
-        }
-    }
-
-    fn draw_file_label(&self, ui: &mut egui::Ui, total_pages: usize) {
-        let file_label = if self.double_page_mode && self.current_page != 0 {
-            let left = self.current_page;
-            let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
-            if self.right_to_left {
-                format!(
-                    "{} | {}",
-                    self.filenames.get(right).unwrap_or(&String::from("")),
-                    self.filenames.get(left).unwrap_or(&String::from(""))
-                )
-            } else {
-                format!(
-                    "{} | {}",
-                    self.filenames.get(left).unwrap_or(&String::from("")),
-                    self.filenames.get(right).unwrap_or(&String::from(""))
-                )
-            }
-        } else {
-            self.filenames
-                .get(self.current_page)
-                .cloned()
-                .unwrap_or_else(|| String::from(""))
-        };
-        ui.label(file_label);
-    }
-
-    fn draw_top_bar(&mut self, ctx: &egui::Context, total_pages: usize) {
-        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                self.draw_direction_button(ui);
-                self.draw_dual_page_toggle(ui, total_pages);
-                self.draw_bump_button(ui, total_pages);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    self.draw_file_label(ui, total_pages);
-                });
-            });
-        });
-    }
-
-    fn draw_zoom_slider(&mut self, ui: &mut egui::Ui) {
-        ui.add(egui::Slider::new(&mut self.zoom, 0.05..=10.0));
-        if ui.button("Reset Zoom").clicked() {
-            self.zoom = 1.0;
-            self.pan_offset = Vec2::ZERO;
-            self.has_initialised_zoom = false;
-            self.texture_cache.clear();
-        }
-    }
-
-    fn draw_navigation_buttons(&mut self, ui: &mut egui::Ui, total_pages: usize) {
-        if ui.button("Next").clicked() {
-            self.current_page = (self.current_page + 1).min(self.filenames.len().saturating_sub(1));
-        }
-        if ui.button("Prev").clicked() {
-            self.current_page = self.current_page.saturating_sub(1);
-        }
-    }
-
-    fn draw_page_label(&self, ui: &mut egui::Ui, total_pages: usize) {
-        let page_label = if self.double_page_mode && self.current_page != 0 {
-            let left = self.current_page;
-            let right = (self.current_page + 1).min(total_pages.saturating_sub(1));
-            if self.right_to_left {
-                format!("Page ({},{})/{}", right + 1, left + 1, total_pages)
-            } else {
-                format!("Page ({},{})/{}", left + 1, right + 1, total_pages)
-            }
-        } else {
-            format!("Page {}/{}", self.current_page + 1, total_pages)
-        };
-        ui.label(page_label);
-    }
-
-    fn draw_bottom_bar(&mut self, ctx: &egui::Context, total_pages: usize) {
-        egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                self.draw_zoom_slider(ui);
-                ui.separator();
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    self.draw_navigation_buttons(ui, total_pages);
-                    self.draw_page_label(ui, total_pages);
-                });
-            });
-        });
-    }
-
-    fn draw_central_image_area(&mut self, ctx: &egui::Context, total_pages: usize) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let image_area = ui.available_rect_before_wrap();
-
-            // Pan (drag to move image)
-            let response = ui.allocate_rect(image_area, egui::Sense::drag());
-            if response.drag_started() {
-                self.drag_start = response.interact_pointer_pos();
-            }
-            if response.dragged() {
-                if let Some(pos) = response.interact_pointer_pos() {
-                    if let Some(start) = self.drag_start {
-                        let delta = pos - start;
-                        self.pan_offset += delta;
-                        self.drag_start = Some(pos);
-                        self.texture_cache.clear();
-                    }
-                }
-            }
-            if response.drag_released() {
-                self.drag_start = None;
-            }
-
-            // Display images or spinner
-            if self.double_page_mode {
-                let page1 = self.current_page;
-                let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
-                let loaded1 = self.image_lru.lock().unwrap().get(&page1).cloned();
-                let loaded2 = if page2 != usize::MAX {
-                    self.image_lru.lock().unwrap().get(&page2).cloned()
-                } else {
-                    None
-                };
-
-                if let (Some(loaded1), Some(loaded2)) = (&loaded1, &loaded2) {
-                    if !self.has_initialised_zoom {
-                        self.reset_zoom(image_area, loaded1);
-                    }
-                    let left_first = !self.right_to_left;
-                    draw_dual_page(
-                        ui,
-                        loaded1,
-                        Some(loaded2),
-                        image_area,
-                        self.zoom,
-                        PAGE_MARGIN_SIZE as f32,
-                        left_first,
-                        self.pan_offset,
-                        &mut self.texture_cache,
-                    );
-                    let (w1, h1) = loaded1.image.dimensions();
-                    let (w2, h2) = loaded2.image.dimensions();
-                    let total_width = w1 + w2;
-                    let max_height = h1.max(h2);
-                    self.clamp_pan((total_width, max_height), image_area);
-                } else if let Some(loaded1) = &loaded1 {
-                    if !self.has_initialised_zoom {
-                        self.reset_zoom(image_area, loaded1);
-                    }
-                    draw_single_page(ui, loaded1, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
-                    self.clamp_pan(loaded1.image.dimensions(), image_area);
-                } else {
-                    draw_spinner(ui, image_area);
-                }
-            } else {
-                let loaded = self.image_lru.lock().unwrap().get(&self.current_page).cloned();
-                if let Some(loaded) = loaded {
-                    if !self.has_initialised_zoom {
-                        self.reset_zoom(image_area, &loaded);
-                    }
-                    draw_single_page(ui, &loaded, image_area, self.zoom, self.pan_offset, &mut self.texture_cache);
-                    self.clamp_pan(loaded.image.dimensions(), image_area);
-                } else {
-                    draw_spinner(ui, image_area);
-                }
-            }
-        });
+        self.pan_offset = Vec2::ZERO;
     }
 }
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
-        if let Some(file) = dropped_files.iter().find_map(|f| f.path.clone()) {
-            let path = file.to_path_buf();
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-            if ext == "cbz" || ext == "zip" || path.is_dir() {
-                match CBZViewerApp::new(path) {
-                    Ok(new_app) => {
-                        *self = new_app;
-                    }
-                    Err(e) => {
-                        // You can show a dialog, toast, or log the error here
-                        log::error!("Failed to open archive: {e}");
-                        // Optionally, store the error in the app state to display in the UI
-                    }
-                }
-            }
-        }
-
-        if self.on_open_comic {
-            self.on_open_comic = false;
-            if let Some(path) = rfd::FileDialog::new().add_filter("Comic Book Archive", &["cbz", "zip"]).pick_file() {
-                match CBZViewerApp::new(path) {
-                    Ok(new_app) => {
-                        *self = new_app;
-                    }
-                    Err(e) => {
-                        log::error!("Failed to open archive: {e}");
-                    }
-                }
-                return; // Prevent further update with old state
-            }
-        }
-        if self.on_open_folder {
-            self.on_open_folder = false;
-            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                match CBZViewerApp::new(path) {
-                    Ok(new_app) => {
-                        *self = new_app;
-                    }
-                    Err(e) => {
-                        log::error!("Failed to open folder: {e}");
-                    }
-                }
-                return;
-            }
-        }
-
         let total_pages = self.filenames.len();
-        let input = ctx.input(|i| i.clone());
+        
+        // Must be first; underneath all other UI elements
+        crate::ui::layout::draw_central_image_area(self, ctx, total_pages);
+        
+        // Draw the top and bottom bars
+        crate::ui::layout::draw_top_bar(self, ctx, total_pages);
+        crate::ui::layout::draw_bottom_bar(self, ctx, total_pages);
 
-        // --- Navigation logic (arrow keys) ---
-        let (next_key, prev_key) = self.navigation_keys();
-        let next_pressed = input.key_pressed(next_key) || input.key_pressed(egui::Key::ArrowDown);
-        let prev_pressed = input.key_pressed(prev_key) || input.key_pressed(egui::Key::ArrowUp);
+        // Mouse wheel zoom
+        handle_zoom(
+            &mut self.zoom,
+            ctx,
+            0.05,
+            10.0,
+            &mut self.texture_cache,
+            &mut self.has_initialised_zoom,
+        );
 
-        if self.double_page_mode {
-            if next_pressed {
-                if self.current_page == 0 && total_pages > 1 {
-                    self.current_page = 1;
-                } else if self.current_page + 2 < total_pages {
-                    self.current_page += 2;
-                } else if self.current_page + 1 < total_pages {
-                    self.current_page += 1;
-                }
-                self.has_initialised_zoom = false;
-                self.texture_cache.clear();
-            }
-            if prev_pressed {
-                if self.current_page == 1 || self.current_page == 0 {
-                    self.current_page = 0;
-                } else if self.current_page >= 2 {
-                    self.current_page -= 2;
-                }
-                self.has_initialised_zoom = false;
-                self.texture_cache.clear();
-            }
-        } else {
-            if next_pressed && self.current_page + 1 < total_pages {
-                self.current_page += 1;
-                self.has_initialised_zoom = false;
-                self.texture_cache.clear();
-            }
-            if prev_pressed && self.current_page > 0 {
-                self.current_page -= 1;
-                self.has_initialised_zoom = false;
-                self.texture_cache.clear();
-            }
-        }
+        // Pan (drag to move image)
+        // You need to pass the correct area (Rect) for your image.
+        // For example, if you have it as `let image_area = ...;`:
+        // crate::ui::image::handle_pan(&mut self.pan_offset, &mut self.drag_start, &mut self.ima, &mut self.texture_cache);
 
-        // --- Zoom with mouse wheel ---
-        if input.raw_scroll_delta.y != 0.0 {
-            let zoom_factor = 1.1_f32.powf(input.raw_scroll_delta.y / 10.0);
-            self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
-            self.texture_cache.clear();
-        }
 
-        // --- Preload images for current view (and next page for smooth navigation) ---
-        let total_pages = self.filenames.len();
+        // Optionally, show log messages at the bottom
+        // egui::TopBottomPanel::bottom("log_bar").show(ctx, |ui| {
+        //     for msg in self.ui_logger.messages() {
+        //         ui.colored_label(egui::Color32::YELLOW, msg);
+        //     }
+        // });
+
+        // Preload images for current view and next pages
         let mut pages_to_preload = vec![self.current_page];
         for offset in 1..=READ_AHEAD {
             let next = self.current_page + offset;
@@ -435,9 +170,20 @@ impl eframe::App for CBZViewerApp {
             );
         }
 
-        self.draw_central_image_area(ctx, total_pages);
-        show_menu_bar(ctx, &mut self.on_open_comic, &mut self.on_open_folder);
-        self.draw_top_bar(ctx, total_pages);
-        self.draw_bottom_bar(ctx, total_pages);
+        // --- Zoom with mouse wheel ---
+        let input = ctx.input(|i| i.clone());
+        if input.raw_scroll_delta.y != 0.0 {
+            let zoom_factor = 1.1_f32.powf(input.raw_scroll_delta.y / 10.0);
+            self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
+            self.texture_cache.clear();
+        }
+
+        // Keyboard navigation
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+            self.goto_next_page();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+            self.goto_prev_page();
+        }
     }
 }

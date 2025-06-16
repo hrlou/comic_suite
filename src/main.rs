@@ -1,20 +1,19 @@
-// #![windows_subsystem = "windows"]
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+//! Entry point for the CBZ Viewer application.
 
 mod config;
-mod archive;
-mod texture_cache;
-mod image_cache;
-mod ui;
-mod app;
 mod error;
-mod ui_log;
+mod archive;
+mod cache;
+mod ui;
+// mod util;
+mod app;
 
-use app::CBZViewerApp;
+use crate::app::CBZViewerApp;
 use config::{WIN_WIDTH, WIN_HEIGHT};
-use eframe::egui::Vec2;
+use eframe::egui::{self, Vec2};
 use std::path::PathBuf;
 
+/// Show a file dialog to pick a comic archive.
 fn pick_comic() -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter("Comic Book Archive", &["cbz", "zip"])
@@ -24,7 +23,6 @@ fn pick_comic() -> Option<PathBuf> {
 fn main() {
     // Initialize logging (to file and console)
     env_logger::Builder::from_default_env()
-        // .filter_level(log::LevelFilter::Debug)
         .format_timestamp_secs()
         .init();
 
@@ -35,21 +33,15 @@ fn main() {
         .or_else(pick_comic);
 
     if let Some(path) = path {
-        match CBZViewerApp::new(path) {
-            Ok(app) => {
-                let _ = eframe::run_native(
-                    "CBZ Viewer",
-                    eframe::NativeOptions {
-                        viewport: eframe::egui::ViewportBuilder::default().with_inner_size([WIN_WIDTH, WIN_HEIGHT]),
-                        ..Default::default()
-                    },
-                    Box::new(|_cc| Box::new(app)),
-                );
-            }
-            Err(e) => {
-                eprintln!("Failed to open archive: {e}");
-                // Optionally show a dialog or UI error here
-            }
-        }
+        let app = CBZViewerApp::new(path).expect("Failed to load comic");
+        let native_options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default().with_inner_size([WIN_WIDTH, WIN_HEIGHT]),
+            ..Default::default()
+        };
+        eframe::run_native(
+            "CBZ Viewer",
+            native_options,
+            Box::new(|_cc| Box::new(app)),
+        );
     }
 }
