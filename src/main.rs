@@ -32,7 +32,7 @@ fn main() {
         viewport: egui::ViewportBuilder::default().with_inner_size([WIN_WIDTH, WIN_HEIGHT]),
         ..Default::default()
     };
-    eframe::run_native(
+    let _ = eframe::run_native(
         "CBZ Viewer",
         native_options,
         Box::new(|_cc| Box::new(app)),

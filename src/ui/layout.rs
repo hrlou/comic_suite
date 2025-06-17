@@ -127,10 +127,10 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize
             ui.separator();
             
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Next").clicked() {
+                if ui.button("→").clicked() {
                     app.goto_next_page();
                 }
-                if ui.button("Prev").clicked() {
+                if ui.button("←").clicked() {
                     app.goto_prev_page();
                 }
                 let page_label = if app.double_page_mode && app.current_page != 0 {
