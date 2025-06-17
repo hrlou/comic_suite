@@ -125,6 +125,19 @@ impl CBZViewerApp {
         }
     }
 
+    pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
+        match CBZViewerApp::new(Some(path)) {
+            Ok(new_app) => {
+                *self = new_app;
+                return Ok(());
+            }
+            Err(e) => {
+                self.ui_logger.error(format!("Failed to open new comic: {}", e));
+                return Err(e);
+            }
+        }
+    }
+
     /// Called whenever the page changes: resets zoom, pan, and clears texture cache.
     pub fn on_page_changed(&mut self) {
         self.has_initialised_zoom = false;
@@ -136,28 +149,14 @@ impl CBZViewerApp {
         if self.on_open_comic {
             self.on_open_comic = false;
             if let Some(path) = rfd::FileDialog::new().add_filter("Comic Book Archive", &["cbz", "zip"]).pick_file() {
-                match CBZViewerApp::new(Some(path)) {
-                    Ok(new_app) => {
-                        *self = new_app;
-                    }
-                    Err(e) => {
-                        self.ui_logger.error(format!("Failed to open folder: {}", e));
-                    }
-                }
+                let _ = self.load_new_file(path); 
                 return; // Prevent further update with old state
             }
         }
         if self.on_open_folder {
             self.on_open_folder = false;
             if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                match CBZViewerApp::new(Some(path)) {
-                    Ok(new_app) => {
-                        *self = new_app;
-                    }
-                    Err(e) => {
-                        self.ui_logger.error(format!("Failed to open folder: {}", e));
-                    }
-                }
+                let _ = self.load_new_file(path);
                 return;
             }
         }
@@ -167,6 +166,17 @@ impl CBZViewerApp {
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mut total_pages = 0;
+
+        // Check if file is dragged and dropped
+        ctx.input(|i| {
+            for file in &i.raw.dropped_files {
+                if let Some(path) = &file.path {
+                    self.load_new_file(path.clone()).unwrap_or_else(|e| {
+                        self.ui_logger.error(format!("Failed to load file: {}", e));
+                    });
+                }
+            }
+        });
 
         if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
@@ -224,6 +234,8 @@ impl eframe::App for CBZViewerApp {
             if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
                 self.goto_prev_page();
             }
+        } else {
+            // No archive loaded, show a message
         }
         // Menu bar
         self.handle_menu_bar_file();
