@@ -1,18 +1,18 @@
 //! Main application state and logic.
 
-use crate::archive::{self, ImageArchive};
-use crate::cache::{SharedImageCache, TextureCache, new_image_cache, load_image_async, LoadedPage, PageImage};
-use crate::ui::{draw_single_page, draw_dual_page, draw_spinner, log::UiLogger};
+use crate::archive::ImageArchive;
+use crate::cache::{SharedImageCache, TextureCache, new_image_cache, load_image_async, LoadedPage};
+use crate::ui::{draw_top_bar, draw_bottom_bar, draw_central_image_area, log::UiLogger};
 use crate::config::*;
 use crate::error::AppError;
 
-use eframe::epaint::tessellator::Path;
-use eframe::{egui::{self, Vec2, Rect, Layout, pos2}, App};
+// use eframe::epaint::tessellator::Path;
+use eframe::{egui::{self, Vec2, Rect}};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 
-use crate::ui::image::{handle_zoom, handle_pan};
+use crate::ui::image::{handle_zoom};
 
 /// The main application struct, holding all state.
 pub struct CBZViewerApp {
@@ -30,6 +30,7 @@ pub struct CBZViewerApp {
     pub right_to_left: bool,
     pub has_initialised_zoom: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
+    pub on_goto_page: (bool, usize),
     pub on_open_comic: bool,
     pub on_open_folder: bool,
 }
@@ -52,6 +53,7 @@ impl CBZViewerApp {
             right_to_left: DEFAULT_RIGHT_TO_LEFT,
             has_initialised_zoom: false,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
+            on_goto_page: (false, 0),
             on_open_comic: false,
             on_open_folder: false,
         };
@@ -93,36 +95,46 @@ impl CBZViewerApp {
 
     /// Go to the previous page (with bounds checking).
     pub fn goto_prev_page(&mut self) {
-        if self.current_page > 0 {
-            self.current_page -= 1;
-            self.on_page_changed();
+        if self.current_page == 0 {
+            self.ui_logger.warn("Already at the first page, cannot go back.");
+            return;
         }
+        if self.double_page_mode {
+            if self.current_page == 1 {
+                self.ui_logger.warn("Already at the first page, cannot go back.");
+                return;
+            }
+            if self.goto_page(self.current_page - 2) {
+                return; // If double page mode, go to the previous double page 
+            }
+        }
+        self.goto_page(self.current_page - 1); 
     }
 
     /// Go to the next page (with bounds checking).
     pub fn goto_next_page(&mut self) {
-        if let Some(filenames) = &self.filenames {
-            let iter = if self.double_page_mode { 2 } else { 1 };
-            if self.current_page + iter < filenames.len() {
-                self.current_page += iter;
-                self.on_page_changed();
+        if self.double_page_mode {
+            if self.goto_page(self.current_page + 2) {
+                return;
             }
-        } else {
-            self.ui_logger.warn("No filenames available to go to next page.");
         }
+        self.goto_page(self.current_page + 1); 
     }
 
     /// Go to a specific page (with bounds checking).
-    pub fn goto_page(&mut self, page: usize) {
+    pub fn goto_page(&mut self, page: usize) -> bool {
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
                 self.ui_logger.warn(format!("Requested page {} is out of bounds (max: {}).", page, filenames.len() - 1));
-                return;
+                return false;
             }
+            self.current_page = page;
+            self.on_page_changed();
         } else {
             self.ui_logger.warn("No filenames available to go to specific page.");
-            return;
+            return false;
         }
+        return true;
     }
 
     pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
@@ -189,7 +201,7 @@ impl eframe::App for CBZViewerApp {
             let filenames = self.filenames.clone().unwrap_or_default();
             total_pages = filenames.len();
 
-            crate::ui::layout::draw_central_image_area(self, ctx, total_pages);
+            draw_central_image_area(self, ctx, total_pages);
 
             // Mouse wheel zoom
             handle_zoom(
@@ -234,6 +246,15 @@ impl eframe::App for CBZViewerApp {
             if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
                 self.goto_prev_page();
             }
+
+            if self.on_goto_page.0 {
+                self.on_goto_page.0 = false;
+                if self.goto_page(self.on_goto_page.1) {
+                    self.ui_logger.info(format!("Navigated to page {}", self.on_goto_page.1));
+                } else {
+                    self.ui_logger.warn(format!("Failed to navigate to page {}", self.on_goto_page.1));
+                }
+            }
         } else {
             // No archive loaded, show a message
         }
@@ -241,7 +262,7 @@ impl eframe::App for CBZViewerApp {
         self.handle_menu_bar_file();
         
         // Draw the top and bottom bars
-        crate::ui::layout::draw_top_bar(self, ctx, total_pages);
-        crate::ui::layout::draw_bottom_bar(self, ctx, total_pages);
+        draw_top_bar(self, ctx, total_pages);
+        draw_bottom_bar(self, ctx, total_pages);
     }
 }

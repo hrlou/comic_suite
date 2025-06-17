@@ -1,6 +1,6 @@
 //! UI layout: top bar, bottom bar, and central image area.
 
-use eframe::egui::{self, Context, Layout, Vec2, Rect};
+use eframe::egui::{self, Context, FontId, Layout, Rect, TextEdit, TextStyle, Vec2};
 use crate::app::CBZViewerApp;
 use crate::config::PAGE_MARGIN_SIZE;
 use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
@@ -104,6 +104,26 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize
                 app.has_initialised_zoom = false;
                 app.texture_cache.clear();
             }
+            ui.separator();
+
+            let char_width = ui.fonts(|f| {
+                let font_id = FontId::monospace(ui.style().text_styles[&TextStyle::Monospace].size);
+                f.glyph_width(&font_id, '0')
+});
+            let desired_width = char_width * 4.0 + 10.0; // +10 for padding
+            let mut input_string = app.on_goto_page.1.to_string();
+            let input = ui.add_sized(
+                [desired_width, ui.spacing().interact_size.y],
+                TextEdit::singleline(&mut input_string)
+                    .hint_text("Go to a page")
+                    .font(TextStyle::Monospace)
+            );
+            input_string.retain(|c| c.is_ascii_digit());
+            app.on_goto_page = (false, input_string.parse::<usize>().unwrap_or("0".parse().unwrap_or(0)));
+            if ui.button("Goto").clicked() {
+                app.on_goto_page.0 = true;
+            }
+
             ui.separator();
             
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {

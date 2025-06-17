@@ -1,7 +1,7 @@
 //! Image archive abstraction for zip/cbz files and folders.
 
 use std::fs::{self, File};
-use std::io::{Read, Seek};
+use std::io::{Read};
 use std::path::{Path, PathBuf};
 use zip::read::ZipArchive;
 use crate::error::AppError;
@@ -17,8 +17,8 @@ impl ImageArchive {
     pub fn process<P: AsRef<Path>>(path: P) -> Result<Self, AppError> {
         let path = path.as_ref();
         if path.is_file() {
-            let file = File::open(path)?;
-            let zip = ZipArchive::new(file)?;
+            // let file = File::open(path)?;
+            // let zip = ZipArchive::new(file)?;
             Ok(ImageArchive::Zip(ZipImageArchive {
                 path: path.to_path_buf(),
                 // ...store zip if you want, or open on demand...

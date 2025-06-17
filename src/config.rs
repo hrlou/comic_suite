@@ -17,4 +17,4 @@ pub const DEFAULT_RIGHT_TO_LEFT: bool = false;
 /// Whether reading direction affects arrow keys.
 pub const READING_DIRECTION_AFFECTS_ARROWS: bool = true;
 /// How many pages ahead to pre-cache.
-pub const READ_AHEAD: usize = 6;
+pub const READ_AHEAD: usize = 16;
