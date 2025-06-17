@@ -75,6 +75,7 @@ fn draw_gif(
     zoom: f32,
     pan: Vec2,
 ) {
+    ui.ctx().request_repaint(); 
     if let PageImage::AnimatedGif { frames, delays, start_time } = &loaded.image {
         if frames.is_empty() {
             warn!("GIF has no frames: {}", loaded.filename);

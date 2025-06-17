@@ -102,12 +102,13 @@ impl CBZViewerApp {
     /// Go to the next page (with bounds checking).
     pub fn goto_next_page(&mut self) {
         if let Some(filenames) = &self.filenames {
-            if self.current_page + 1 < filenames.len() {
-                self.current_page += 1;
+            let iter = if self.double_page_mode { 2 } else { 1 };
+            if self.current_page + iter < filenames.len() {
+                self.current_page += iter;
                 self.on_page_changed();
             }
         } else {
-            log::warn!("No filenames available to go to next page.");
+            self.ui_logger.warn("No filenames available to go to next page.");
         }
     }
 
@@ -115,11 +116,11 @@ impl CBZViewerApp {
     pub fn goto_page(&mut self, page: usize) {
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
-                log::warn!("Requested page {} is out of bounds (max: {}).", page, filenames.len() - 1);
+                self.ui_logger.warn(format!("Requested page {} is out of bounds (max: {}).", page, filenames.len() - 1));
                 return;
             }
         } else {
-            log::warn!("No filenames available to go to specific page.");
+            self.ui_logger.warn("No filenames available to go to specific page.");
             return;
         }
     }
@@ -140,7 +141,7 @@ impl CBZViewerApp {
                         *self = new_app;
                     }
                     Err(e) => {
-                        log::error!("Failed to open archive: {e}");
+                        self.ui_logger.error(format!("Failed to open folder: {}", e));
                     }
                 }
                 return; // Prevent further update with old state
@@ -154,7 +155,7 @@ impl CBZViewerApp {
                         *self = new_app;
                     }
                     Err(e) => {
-                        log::error!("Failed to open folder: {e}");
+                        self.ui_logger.error(format!("Failed to open folder: {}", e));
                     }
                 }
                 return;
@@ -173,7 +174,7 @@ impl eframe::App for CBZViewerApp {
             //     // Must be first; underneath all other UI elements
             //     total_pages = filenames.len();
             // } else {
-            //     log::warn!("No archive available to display.");
+            //     self.ui_logger.warn("No archive available to display.");
             // }
             let filenames = self.filenames.clone().unwrap_or_default();
             total_pages = filenames.len();
@@ -225,7 +226,6 @@ impl eframe::App for CBZViewerApp {
             }
         }
         // Menu bar
-        crate::ui::layout::draw_menu_bar(self, ctx);
         self.handle_menu_bar_file();
         
         // Draw the top and bottom bars

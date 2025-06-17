@@ -1,4 +1,6 @@
-//! Entry point for the CBZ Viewer application.
+// #![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 
 mod config;
 mod error;

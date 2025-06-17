@@ -5,93 +5,90 @@ use crate::app::CBZViewerApp;
 use crate::config::PAGE_MARGIN_SIZE;
 use crate::ui::{draw_single_page, draw_dual_page, draw_spinner};
 
-pub fn draw_menu_bar(app: &mut CBZViewerApp, ctx: &Context) {
-    egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-        egui::menu::bar(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if ui.button("Open Comic...").clicked() {
-                    app.on_open_comic = true;
-                    ui.close_menu();
-                }
-                if ui.button("Open Folder...").clicked() {
-                    app.on_open_folder = true;
-                    ui.close_menu();
-                }
-            });
-        });
-    });
-}
-
 /// Draw the top bar (navigation, mode toggles, file info).
 pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            let direction_label = if app.right_to_left { "R <- L" } else { "L -> R" };
-            if ui.button(direction_label)
-                .on_hover_text("Reading direction")
-                .clicked()
-            {
-                app.right_to_left = !app.right_to_left;
-                app.texture_cache.clear();
-            }
-
-            if ui.selectable_label(app.double_page_mode, "Dual")
-                .on_hover_text("Show two pages at once, cover page will be excluded")
-                .clicked()
-            {
-                if app.double_page_mode {
-                    app.double_page_mode = false;
-                    app.current_page = app.current_page.min(total_pages.saturating_sub(1));
-                    app.has_initialised_zoom = false;
-                    app.texture_cache.clear();
-                } else { 
-                    if app.current_page > 0 && app.current_page % 2 != 0 {
-                        app.current_page -= 1;
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Open Comic...").clicked() {
+                        app.on_open_comic = true;
+                        ui.close_menu();
                     }
-                    app.double_page_mode = true;
-                    app.has_initialised_zoom = false;
-                    app.texture_cache.clear();
-                }
-            }
-
-            if app.double_page_mode {
-                if ui.button("Bump")
-                    .on_hover_text("Bump over a single page, use this if there is misalignment")
+                    if ui.button("Open Folder...").clicked() {
+                        app.on_open_folder = true;
+                        ui.close_menu();
+                    }
+                });
+            });
+            ui.with_layout(Layout::right_to_left(egui::Align::Center),  |ui| {
+                let direction_label = if app.right_to_left { "R <- L" } else { "L -> R" };
+                if ui.button(direction_label)
+                    .on_hover_text("Reading direction")
                     .clicked()
                 {
-                    if app.current_page + 1 < total_pages {
-                        app.current_page += 1;
+                    app.right_to_left = !app.right_to_left;
+                    app.texture_cache.clear();
+                }
+
+                if ui.selectable_label(app.double_page_mode, "Dual")
+                    .on_hover_text("Show two pages at once, cover page will be excluded")
+                    .clicked()
+                {
+                    if app.double_page_mode {
+                        app.double_page_mode = false;
+                        app.current_page = app.current_page.min(total_pages.saturating_sub(1));
+                        app.has_initialised_zoom = false;
+                        app.texture_cache.clear();
+                    } else { 
+                        if app.current_page > 0 && app.current_page % 2 != 0 {
+                            app.current_page -= 1;
+                        }
+                        app.double_page_mode = true;
                         app.has_initialised_zoom = false;
                         app.texture_cache.clear();
                     }
                 }
-            }
-            
-            ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                // let file_label = if app.double_page_mode && app.current_page != 0 {
-                //     let left = app.current_page;
-                //     let right = (app.current_page + 1).min(total_pages.saturating_sub(1));
-                //     if app.right_to_left {
-                //         format!(
-                //             "{} | {}",
-                //             app.filenames.get(right).unwrap_or(&String::from("")),
-                //             app.filenames.get(left).unwrap_or(&String::from(""))
-                //         )
-                //     } else {
-                //         format!(
-                //             "{} | {}",
-                //             app.filenames.get(left).unwrap_or(&String::from("")),
-                //             app.filenames.get(right).unwrap_or(&String::from(""))
-                //         )
-                //     }
-                // } else {
-                //     app.filenames
-                //         .get(app.current_page)
-                //         .cloned()
-                //         .unwrap_or_else(|| String::from(""))
-                // };
-                // ui.label(file_label);
+
+                if app.double_page_mode {
+                    if ui.button("Bump")
+                        .on_hover_text("Bump over a single page, use this if there is misalignment")
+                        .clicked()
+                    {
+                        if app.current_page + 1 < total_pages {
+                            app.current_page += 1;
+                            app.has_initialised_zoom = false;
+                            app.texture_cache.clear();
+                        }
+                    }
+                }
             });
+            
+            // ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+            //    let file_label = if app.double_page_mode && app.current_page != 0 {
+            //        let left = app.current_page;
+            //        let right = (app.current_page + 1).min(total_pages.saturating_sub(1));
+            //        if app.right_to_left {
+            //            format!(
+            //                "{} | {}",
+            //                app.filenames.get(right).unwrap_or(&String::from("")),
+            //                app.filenames.get(left).unwrap_or(&String::from(""))
+            //            )
+            //        } else {
+            //            format!(
+            //                "{} | {}",
+            //                app.filenames.get(left).unwrap_or(&String::from("")),
+            //                app.filenames.get(right).unwrap_or(&String::from(""))
+            //            )
+            //        }
+            //    } else {
+            //        app.filenames
+            //            .get(app.current_page)
+            //            .cloned()
+            //            .unwrap_or_else(|| String::from(""))
+            //    };
+            //    ui.label(file_label);
+            // });
         });
     });
 }
