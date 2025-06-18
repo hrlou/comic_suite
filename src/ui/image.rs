@@ -352,8 +352,15 @@ pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
     let avail = area.size();
     let max_x = ((w as f32 * app.zoom - avail.x) / 2.0).max(0.0);
     let max_y = ((h as f32 * app.zoom - avail.y) / 2.0).max(0.0);
-    app.pan_offset.x = app.pan_offset.x.clamp(-max_x, max_x);
-    app.pan_offset.y = app.pan_offset.y.clamp(-max_y, max_y);
+
+    // "Spring" factor — smaller means slower pull back
+    let k = 0.2;
+
+    let target_x = app.pan_offset.x.clamp(-max_x, max_x);
+    let target_y = app.pan_offset.y.clamp(-max_y, max_y);
+
+    app.pan_offset.x += (target_x - app.pan_offset.x) * k;
+    app.pan_offset.y += (target_y - app.pan_offset.y) * k;
 }
 
 /// Adjust the pan offset based on drag input.
