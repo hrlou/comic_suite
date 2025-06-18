@@ -170,40 +170,29 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize
 }
 
 /// Draw the central image area (single/dual page, spinner).
-pub fn draw_central_image_area(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) -> egui::Response {
+/// Returns the egui Response for further input handling.
+pub fn draw_central_image_area(
+    app: &mut CBZViewerApp,
+    ctx: &Context,
+    total_pages: usize,
+) -> egui::Response {
+    let mut response_opt = None;
+
     egui::CentralPanel::default().show(ctx, |ui| {
         let image_area = ui.available_rect_before_wrap();
 
-        // Pan (drag to move image)
-        let response = ui.allocate_rect(image_area, egui::Sense::drag());
-        if response.drag_started() {
-            app.drag_start = response.interact_pointer_pos();
-        }
-        if response.dragged() {
-            if let Some(pos) = response.interact_pointer_pos() {
-                if let Some(start) = app.drag_start {
-                    let delta = pos - start;
-                    app.pan_offset += delta;
-                    app.drag_start = Some(pos);
-                    app.texture_cache.clear();
-                }
-            }
-        }
-        // if response.drag_released() {
-            // app.drag_start = None;
-        // }
-        if response.drag_stopped() {
-            app.drag_start = None;
-        }
+        // Allocate rect without panning (no Sense::drag)
+        let response = ui.allocate_rect(image_area, egui::Sense::hover());
+        response_opt = Some(response);
+        
+        let response = ui.allocate_rect(image_area, egui::Sense::click_and_drag());
+        handle_pan(&mut app.pan_offset, &mut app.drag_start, &response, &mut app.texture_cache);
 
-        // Display images or spinner
+        // Display images or spinner depending on mode and loaded pages
         if app.double_page_mode {
             let page1 = app.current_page;
-            let page2 = if page1 + 1 < total_pages {
-                page1 + 1
-            } else {
-                usize::MAX
-            };
+            let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
+
             let loaded1 = app.image_lru.lock().unwrap().get(&page1).cloned();
             let loaded2 = if page2 != usize::MAX {
                 app.image_lru.lock().unwrap().get(&page2).cloned()
@@ -249,12 +238,7 @@ pub fn draw_central_image_area(app: &mut CBZViewerApp, ctx: &Context, total_page
                 draw_spinner(ui, image_area);
             }
         } else {
-            let loaded = app
-                .image_lru
-                .lock()
-                .unwrap()
-                .get(&app.current_page)
-                .cloned();
+            let loaded = app.image_lru.lock().unwrap().get(&app.current_page).cloned();
             if let Some(loaded) = loaded {
                 if !app.has_initialised_zoom {
                     app.reset_zoom(image_area, &loaded);
@@ -273,4 +257,6 @@ pub fn draw_central_image_area(app: &mut CBZViewerApp, ctx: &Context, total_page
             }
         }
     });
+
+    response_opt.expect("Central panel UI always provides a response")
 }

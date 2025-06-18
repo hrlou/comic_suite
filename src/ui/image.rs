@@ -355,6 +355,7 @@ pub fn handle_pan(
     if response.drag_started() {
         *drag_start = response.interact_pointer_pos();
     }
+
     if response.dragged() {
         if let Some(pos) = response.interact_pointer_pos() {
             if let Some(start) = *drag_start {
@@ -365,9 +366,7 @@ pub fn handle_pan(
             }
         }
     }
-    // if response.drag_released() || response.drag_stopped() {
-        // *drag_start = None;
-    // }
+
     if response.drag_stopped() {
         *drag_start = None;
     }
