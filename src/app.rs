@@ -1,6 +1,7 @@
 //! Main application state and logic.
 
-use eframe::egui::Response;
+
+use eframe::egui::gui_zoom::kb_shortcuts;
 
 use crate::prelude::*;
 
@@ -194,18 +195,26 @@ impl eframe::App for CBZViewerApp {
 
             let response = draw_central_image_area(self, ctx, total_pages);
 
-            // Mouse wheel zoom
-            handle_zoom(
-                &mut self.zoom,
-                &mut self.pan_offset,
-                ctx,
-                0.05,
-                10.0,
-                &mut self.texture_cache,
-                &mut self.has_initialised_zoom,
-                response.rect,
-            );
 
+            // Check if mouse is over the zoom area and there is a scroll
+            if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                let zoomed = handle_zoom(
+                    &mut self.zoom,
+                    &mut self.pan_offset,
+                    cursor_pos,
+                    response.rect,
+                    ctx.input(|i| i.raw_scroll_delta.y),
+                    0.05,
+                    10.0,
+                    &mut self.texture_cache, // pass cursor_pos here
+                    &mut self.has_initialised_zoom,
+                );
+            
+                if zoomed {
+                    // adjust pan offset here based on cursor_pos and zoom change
+                }
+            }
+            
             // Preload images for current view and next pages
             let mut pages_to_preload = vec![self.current_page];
             for offset in 1..=READ_AHEAD {

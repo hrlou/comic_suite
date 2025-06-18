@@ -315,52 +315,6 @@ fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan
     }
 }
 
-/// Adjust the zoom factor based on scroll input.
-/// Zooms towards the mouse cursor position.
-/// Returns true if zoom changed.
-pub fn handle_zoom(
-    zoom: &mut f32,
-    pan_offset: &mut Vec2,
-    ctx: &egui::Context,
-    min_zoom: f32,
-    max_zoom: f32,
-    texture_cache: &mut TextureCache,
-    has_initialised_zoom: &mut bool,
-    area: Rect,
-) -> bool {
-    let zoom_speed = 1.1;
-    let scroll_delta = ctx.input(|i| i.raw_scroll_delta);
-
-    // Only zoom when the pointer is over the viewer area
-    if scroll_delta.y != 0.0 && ctx.is_pointer_over_area() {
-        if let Some(pointer_pos) = ctx.pointer_hover_pos() {
-            let old_zoom = *zoom;
-            let new_zoom = if scroll_delta.y > 0.0 {
-                (*zoom * zoom_speed).min(max_zoom)
-            } else {
-                (*zoom / zoom_speed).max(min_zoom)
-            };
-
-            if (new_zoom - old_zoom).abs() > f32::EPSILON {
-                // Center of the image viewer
-                let center = area.center();
-
-                // Relative mouse position to center
-                let mouse_from_center = pointer_pos - center;
-
-                // Adjust pan so that zoom centers on cursor
-                let zoom_ratio = new_zoom / old_zoom;
-                *pan_offset = (*pan_offset + mouse_from_center) * zoom_ratio - mouse_from_center;
-
-                *zoom = new_zoom;
-                *has_initialised_zoom = true;
-                texture_cache.clear();
-                return true;
-            }
-        }
-    }
-    false
-}
 
 /// Gently clamp the pan offset to keep the image inside the viewing area.
 /// This acts like a soft spring rather than a hard limit.
@@ -408,4 +362,57 @@ pub fn handle_pan(
     if response.drag_stopped() {
         *drag_start = None;
     }
+}
+
+/// Handle zooming centered at the cursor position.
+/// 
+/// `zoom`: current zoom level.
+/// `pan_offset`: current pan offset (will be adjusted).
+/// `cursor_pos`: cursor position in screen coords.
+/// `area_rect`: rect of the image/view in screen coords.
+/// `scroll_delta_y`: vertical scroll delta (positive to zoom in).
+/// `min_zoom`, `max_zoom`: zoom clamp range.
+/// `texture_cache`: texture cache to clear on zoom change.
+/// `has_initialised_zoom`: mutable flag to track first zoom event.
+/// 
+/// Returns true if zoom changed.
+pub fn handle_zoom(
+    zoom: &mut f32,
+    pan_offset: &mut egui::Vec2,
+    cursor_pos: egui::Pos2,
+    area_rect: egui::Rect,
+    scroll_delta_y: f32,
+    min_zoom: f32,
+    max_zoom: f32,
+    texture_cache: &mut TextureCache,
+    has_initialised_zoom: &mut bool,
+) -> bool {
+    let zoom_speed = 1.1;
+    let old_zoom = *zoom;
+
+    if scroll_delta_y > 0.0 {
+        *zoom = (*zoom * zoom_speed).min(max_zoom);
+    } else if scroll_delta_y < 0.0 {
+        *zoom = (*zoom / zoom_speed).max(min_zoom);
+    }
+
+    if (*zoom - old_zoom).abs() > f32::EPSILON {
+        // Convert cursor pos from screen space to image local coords relative to center
+        let cursor_rel = egui::vec2(
+            cursor_pos.x - area_rect.center().x,
+            cursor_pos.y - area_rect.center().y,
+        );
+
+        // Calculate zoom factor change
+        let zoom_factor = *zoom / old_zoom;
+
+        // Adjust pan so zoom centers on cursor position
+        *pan_offset = (*pan_offset - cursor_rel) * zoom_factor + cursor_rel;
+
+        *has_initialised_zoom = true;
+        texture_cache.clear();
+        return true;
+    }
+
+    false
 }
