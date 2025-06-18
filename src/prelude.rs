@@ -40,6 +40,7 @@ pub use crate::{
         draw_single_page,
         draw_spinner,
         draw_top_bar,
+        clamp_pan,
         handle_pan,
         handle_zoom,
         log::UiLogger,

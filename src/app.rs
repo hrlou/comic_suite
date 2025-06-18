@@ -73,15 +73,6 @@ impl CBZViewerApp {
         self.has_initialised_zoom = true;
     }
 
-    pub fn clamp_pan(&mut self, image_dims: (u32, u32), area: Rect) {
-        let (w, h) = image_dims;
-        let avail = area.size();
-        let max_x = ((w as f32 * self.zoom - avail.x) / 2.0).max(0.0);
-        let max_y = ((h as f32 * self.zoom - avail.y) / 2.0).max(0.0);
-        self.pan_offset.x = self.pan_offset.x.clamp(-max_x, max_x);
-        self.pan_offset.y = self.pan_offset.y.clamp(-max_y, max_y);
-    }
-
     /// Go to the previous page (with bounds checking).
     pub fn goto_prev_page(&mut self) {
         if self.current_page == 0 {

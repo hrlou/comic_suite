@@ -220,7 +220,7 @@ pub fn draw_central_image_area(
                 let (w2, h2) = loaded2.image.dimensions();
                 let total_width = w1 + w2;
                 let max_height = h1.max(h2);
-                app.clamp_pan((total_width, max_height), image_area);
+                clamp_pan(app, (total_width, max_height), image_area);
             } else if let Some(loaded1) = &loaded1 {
                 if !app.has_initialised_zoom {
                     app.reset_zoom(image_area, loaded1);
@@ -233,7 +233,7 @@ pub fn draw_central_image_area(
                     app.pan_offset,
                     &mut app.texture_cache,
                 );
-                app.clamp_pan(loaded1.image.dimensions(), image_area);
+                clamp_pan(app, loaded1.image.dimensions(), image_area);
             } else {
                 draw_spinner(ui, image_area);
             }
@@ -251,7 +251,7 @@ pub fn draw_central_image_area(
                     app.pan_offset,
                     &mut app.texture_cache,
                 );
-                app.clamp_pan(loaded.image.dimensions(), image_area);
+                clamp_pan(app, loaded.image.dimensions(), image_area);
             } else {
                 draw_spinner(ui, image_area);
             }

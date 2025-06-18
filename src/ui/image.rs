@@ -77,12 +77,12 @@ fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) 
             warn!("GIF has no frames: {}", loaded.filename);
             return;
         }
+        
         let elapsed = start_time.elapsed().as_millis() as u64;
-        // let mut total = 0u64;
-        let mut idx = 0;
-        let mut acc = 0u64;
         let total_duration: u64 = delays.iter().map(|d| *d as u64 * 10).sum();
+        let mut acc = 0u64;
         let t = elapsed % total_duration;
+        let mut idx = 0;
         for (i, delay) in delays.iter().enumerate() {
             let frame_time = *delay as u64 * 10;
             if t < acc + frame_time {
@@ -95,18 +95,20 @@ fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) 
         let w = frame.size[0] as f32;
         let h = frame.size[1] as f32;
         let disp_size = Vec2::new(w * zoom, h * zoom);
+        let rect = Rect::from_center_size(area.center() + pan, disp_size);
 
         let ctx = ui.ctx().clone();
+        let tex_name = format!("gif{}_{}", loaded.index, idx);
         let handle = ctx.load_texture(
-            format!("gif{}_{}", loaded.index, idx),
+            tex_name,
             frame.clone(),
             egui::TextureOptions::default(),
         );
-        let rect = Rect::from_center_size(area.center() + pan, disp_size);
+
         ui.allocate_ui_at_rect(rect, |ui| {
             ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
         });
-        ui.ctx().request_repaint(); // ensure animation updates
+        ui.ctx().request_repaint();
     } else {
         warn!("draw_gif called on non-gif image");
     }
@@ -343,6 +345,15 @@ pub fn handle_zoom(
         }
     }
     false
+}
+
+pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
+    let (w, h) = image_dims;
+    let avail = area.size();
+    let max_x = ((w as f32 * app.zoom - avail.x) / 2.0).max(0.0);
+    let max_y = ((h as f32 * app.zoom - avail.y) / 2.0).max(0.0);
+    app.pan_offset.x = app.pan_offset.x.clamp(-max_x, max_x);
+    app.pan_offset.y = app.pan_offset.y.clamp(-max_y, max_y);
 }
 
 /// Adjust the pan offset based on drag input.
