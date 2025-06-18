@@ -26,11 +26,9 @@ pub struct CBZViewerApp {
     pub on_open_folder: bool,
 }
 
-impl CBZViewerApp {
-    /// Create a new app instance from a given archive path.
-    pub fn new(cc: &CreationContext, path: Option<PathBuf>) -> Result<Self, AppError> {
-        crate::ui::setup_fonts(&cc.egui_ctx);
-        let mut app = Self {
+impl Default for CBZViewerApp {
+    fn default() -> Self {
+        Self {
             archive_path: None,
             archive: None,
             filenames: None,
@@ -48,7 +46,15 @@ impl CBZViewerApp {
             on_goto_page: (false, 0),
             on_open_comic: false,
             on_open_folder: false,
-        };
+        }
+    }
+}
+
+impl CBZViewerApp {
+    /// Create a new app instance from a given archive path.
+    pub fn new(cc: &CreationContext, path: Option<PathBuf>) -> Result<Self, AppError> {
+        crate::ui::setup_fonts(&cc.egui_ctx);
+        let mut app = Self::default();
         if let Some(path) = path {
             let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
             if let Ok(guard) = archive.lock() {
@@ -126,16 +132,18 @@ impl CBZViewerApp {
     }
 
     pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
+        let mut app = Self::default();
         let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
         if let Ok(guard) = archive.lock() {
             let filenames = guard.list_images();
             if filenames.is_empty() {
                 return Err(AppError::NoImages);
             }
-            self.filenames = Some(filenames);
+            app.filenames = Some(filenames);
         }
-        self.archive_path = Some(path);
-        self.archive = Some(Arc::clone(&archive));
+        app.archive_path = Some(path);
+        app.archive = Some(Arc::clone(&archive));
+        *self = app; // Replace current app state with the new one
         return Ok(());
     }
 
@@ -195,7 +203,6 @@ impl eframe::App for CBZViewerApp {
 
             let response = draw_central_image_area(self, ctx, total_pages);
 
-
             // Check if mouse is over the zoom area and there is a scroll
             if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
                 let zoomed = handle_zoom(
@@ -213,6 +220,14 @@ impl eframe::App for CBZViewerApp {
                 if zoomed {
                     // adjust pan offset here based on cursor_pos and zoom change
                 }
+
+                let image_size = response.rect.size();
+                let image_dims_approx = (
+                    (image_size.x / self.zoom) as u32,
+                    (image_size.y / self.zoom) as u32,
+                );
+
+                clamp_pan(self, image_dims_approx, response.rect);
             }
             
             // Preload images for current view and next pages
