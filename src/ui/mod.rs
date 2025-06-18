@@ -16,7 +16,10 @@ pub fn setup_fonts(ctx: &egui::Context) {
         FontData::from_static(include_bytes!("../../assets/fa-solid-900.ttf")),
     );
 
-    fonts.families.insert(FontFamily::Name("FontAwesome".into()), vec!["fa-solid".to_owned()]);
+    fonts.families.insert(
+        FontFamily::Name("FontAwesome".into()),
+        vec!["fa-solid".to_owned()],
+    );
 
     fonts
         .families

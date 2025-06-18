@@ -7,12 +7,12 @@ pub use std::path::{Path, PathBuf};
 pub use std::sync::{Arc, Mutex};
 pub use std::time::Instant;
 
-
 // external crates
 pub use eframe::{
     egui::{
         self, CentralPanel, Color32, ColorImage, Context, FontData, FontDefinitions, FontFamily,
-        FontId, Image, Layout, Rect, RichText, Spinner, TextEdit, TextureHandle, TextStyle, Ui, Vec2,
+        FontId, Image, Layout, Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui,
+        Vec2,
     },
     CreationContext,
 };
@@ -23,26 +23,17 @@ pub use lru::LruCache;
 // crate modules
 pub use crate::{
     app::CBZViewerApp,
-    archive::{ImageArchive},
+    archive::ImageArchive,
     cache::{
         image_cache::{LoadedPage, PageImage},
+        load_image_async, new_image_cache,
         texture_cache::TextureCache,
-        load_image_async,
-        new_image_cache,
         SharedImageCache,
     },
     config::*,
     error::AppError,
     ui::{
-        draw_bottom_bar,
-        draw_central_image_area,
-        draw_dual_page,
-        draw_single_page,
-        draw_spinner,
-        draw_top_bar,
-        clamp_pan,
-        handle_pan,
-        handle_zoom,
-        log::UiLogger,
+        clamp_pan, draw_bottom_bar, draw_central_image_area, draw_dual_page, draw_single_page,
+        draw_spinner, draw_top_bar, handle_pan, handle_zoom, log::UiLogger,
     },
 };

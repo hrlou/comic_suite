@@ -192,16 +192,18 @@ impl eframe::App for CBZViewerApp {
             let filenames = self.filenames.clone().unwrap_or_default();
             total_pages = filenames.len();
 
-            draw_central_image_area(self, ctx, total_pages);
+            let response = draw_central_image_area(self, ctx, total_pages);
 
             // Mouse wheel zoom
             handle_zoom(
                 &mut self.zoom,
+                &mut self.pan_offset,
                 ctx,
                 0.05,
                 10.0,
                 &mut self.texture_cache,
                 &mut self.has_initialised_zoom,
+                response.rect,
             );
 
             // Preload images for current view and next pages
@@ -248,9 +250,15 @@ impl eframe::App for CBZViewerApp {
         } else {
             // No archive loaded, show a message
             CentralPanel::default().show(ctx, |ui| {
-                ui.with_layout(egui::Layout::centered_and_justified(egui::Direction::TopDown), |ui| {
-                    ui.label(RichText::new("No Image Loaded \u{e09a}").text_style(TextStyle::Heading));
-                });
+                ui.with_layout(
+                    egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                    |ui| {
+                        ui.label(
+                            RichText::new("No Image Loaded \u{e09a}")
+                                .text_style(TextStyle::Heading),
+                        );
+                    },
+                );
             });
         }
         // Menu bar

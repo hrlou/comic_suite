@@ -77,7 +77,7 @@ fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) 
             warn!("GIF has no frames: {}", loaded.filename);
             return;
         }
-        
+
         let elapsed = start_time.elapsed().as_millis() as u64;
         let total_duration: u64 = delays.iter().map(|d| *d as u64 * 10).sum();
         let mut acc = 0u64;
@@ -99,11 +99,7 @@ fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) 
 
         let ctx = ui.ctx().clone();
         let tex_name = format!("gif{}_{}", loaded.index, idx);
-        let handle = ctx.load_texture(
-            tex_name,
-            frame.clone(),
-            egui::TextureOptions::default(),
-        );
+        let handle = ctx.load_texture(tex_name, frame.clone(), egui::TextureOptions::default());
 
         ui.allocate_ui_at_rect(rect, |ui| {
             ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
@@ -320,40 +316,63 @@ fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan
 }
 
 /// Adjust the zoom factor based on scroll input.
+/// Zooms towards the mouse cursor position.
 /// Returns true if zoom changed.
 pub fn handle_zoom(
     zoom: &mut f32,
+    pan_offset: &mut Vec2,
     ctx: &egui::Context,
     min_zoom: f32,
     max_zoom: f32,
     texture_cache: &mut TextureCache,
     has_initialised_zoom: &mut bool,
+    area: Rect,
 ) -> bool {
     let zoom_speed = 1.1;
     let scroll_delta = ctx.input(|i| i.raw_scroll_delta);
+
+    // Only zoom when the pointer is over the viewer area
     if scroll_delta.y != 0.0 && ctx.is_pointer_over_area() {
-        let old_zoom = *zoom;
-        if scroll_delta.y > 0.0 {
-            *zoom = (*zoom * zoom_speed).min(max_zoom);
-        } else if scroll_delta.y < 0.0 {
-            *zoom = (*zoom / zoom_speed).max(min_zoom);
-        }
-        if (*zoom - old_zoom).abs() > f32::EPSILON {
-            *has_initialised_zoom = true;
-            texture_cache.clear();
-            return true;
+        if let Some(pointer_pos) = ctx.pointer_hover_pos() {
+            let old_zoom = *zoom;
+            let new_zoom = if scroll_delta.y > 0.0 {
+                (*zoom * zoom_speed).min(max_zoom)
+            } else {
+                (*zoom / zoom_speed).max(min_zoom)
+            };
+
+            if (new_zoom - old_zoom).abs() > f32::EPSILON {
+                // Center of the image viewer
+                let center = area.center();
+
+                // Relative mouse position to center
+                let mouse_from_center = pointer_pos - center;
+
+                // Adjust pan so that zoom centers on cursor
+                let zoom_ratio = new_zoom / old_zoom;
+                *pan_offset = (*pan_offset + mouse_from_center) * zoom_ratio - mouse_from_center;
+
+                *zoom = new_zoom;
+                *has_initialised_zoom = true;
+                texture_cache.clear();
+                return true;
+            }
         }
     }
     false
 }
 
+/// Gently clamp the pan offset to keep the image inside the viewing area.
+/// This acts like a soft spring rather than a hard limit.
 pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
     let (w, h) = image_dims;
     let avail = area.size();
+
+    // Max scrollable distance from center in each direction
     let max_x = ((w as f32 * app.zoom - avail.x) / 2.0).max(0.0);
     let max_y = ((h as f32 * app.zoom - avail.y) / 2.0).max(0.0);
 
-    // "Spring" factor — smaller means slower pull back
+    // Spring stiffness factor: 0 = no correction, 1 = instant clamp
     let k = 0.2;
 
     let target_x = app.pan_offset.x.clamp(-max_x, max_x);
@@ -364,6 +383,7 @@ pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
 }
 
 /// Adjust the pan offset based on drag input.
+/// Records starting position and moves the view with the drag delta.
 pub fn handle_pan(
     pan_offset: &mut Vec2,
     drag_start: &mut Option<egui::Pos2>,
@@ -380,7 +400,7 @@ pub fn handle_pan(
                 let delta = pos - start;
                 *pan_offset += delta;
                 *drag_start = Some(pos);
-                texture_cache.clear();
+                texture_cache.clear(); // Force redraw due to view change
             }
         }
     }

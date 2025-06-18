@@ -184,14 +184,23 @@ pub fn draw_central_image_area(
         // Allocate rect without panning (no Sense::drag)
         let response = ui.allocate_rect(image_area, egui::Sense::hover());
         response_opt = Some(response);
-        
+
         let response = ui.allocate_rect(image_area, egui::Sense::click_and_drag());
-        handle_pan(&mut app.pan_offset, &mut app.drag_start, &response, &mut app.texture_cache);
+        handle_pan(
+            &mut app.pan_offset,
+            &mut app.drag_start,
+            &response,
+            &mut app.texture_cache,
+        );
 
         // Display images or spinner depending on mode and loaded pages
         if app.double_page_mode {
             let page1 = app.current_page;
-            let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
+            let page2 = if page1 + 1 < total_pages {
+                page1 + 1
+            } else {
+                usize::MAX
+            };
 
             let loaded1 = app.image_lru.lock().unwrap().get(&page1).cloned();
             let loaded2 = if page2 != usize::MAX {
@@ -238,7 +247,12 @@ pub fn draw_central_image_area(
                 draw_spinner(ui, image_area);
             }
         } else {
-            let loaded = app.image_lru.lock().unwrap().get(&app.current_page).cloned();
+            let loaded = app
+                .image_lru
+                .lock()
+                .unwrap()
+                .get(&app.current_page)
+                .cloned();
             if let Some(loaded) = loaded {
                 if !app.has_initialised_zoom {
                     app.reset_zoom(image_area, &loaded);

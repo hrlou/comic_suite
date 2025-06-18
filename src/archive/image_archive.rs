@@ -1,7 +1,7 @@
 //! Image archive abstraction for zip/cbz files and folders.
 
-use zip::read::ZipArchive;
 use crate::prelude::*;
+use zip::read::ZipArchive;
 
 /// Represents an archive of images, either from a zip file or a folder.
 pub enum ImageArchive {

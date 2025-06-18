@@ -5,8 +5,8 @@ mod archive;
 mod cache;
 mod config;
 mod error;
-mod ui;
 mod prelude;
+mod ui;
 // mod util;
 mod app;
 
