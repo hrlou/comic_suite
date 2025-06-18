@@ -1,18 +1,8 @@
 //! Main application state and logic.
 
-use crate::archive::ImageArchive;
-use crate::cache::{SharedImageCache, TextureCache, new_image_cache, load_image_async, LoadedPage};
-use crate::ui::{draw_top_bar, draw_bottom_bar, draw_central_image_area, log::UiLogger};
-use crate::config::*;
-use crate::error::AppError;
+use eframe::egui::Response;
 
-// use eframe::epaint::tessellator::Path;
-use eframe::{egui::{self, Vec2, Rect}};
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
-use std::path::PathBuf;
-
-use crate::ui::image::{handle_zoom};
+use crate::prelude::*;
 
 /// The main application struct, holding all state.
 pub struct CBZViewerApp {
@@ -37,7 +27,8 @@ pub struct CBZViewerApp {
 
 impl CBZViewerApp {
     /// Create a new app instance from a given archive path.
-    pub fn new(path: Option<PathBuf>) -> Result<Self, AppError> {
+    pub fn new(cc: &CreationContext, path: Option<PathBuf>) -> Result<Self, AppError> {
+        crate::ui::setup_fonts(&cc.egui_ctx);
         let mut app = Self {
             archive_path: None,
             archive: None,
@@ -61,7 +52,7 @@ impl CBZViewerApp {
             let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
             if let Ok(guard) = archive.lock() {
                 let filenames = guard.list_images();
-                if filenames.is_empty() { 
+                if filenames.is_empty() {
                     return Err(AppError::NoImages);
                 }
                 app.filenames = Some(filenames);
@@ -72,7 +63,6 @@ impl CBZViewerApp {
         Ok(app)
     }
 
-    // Example: Reset zoom logic
     pub fn reset_zoom(&mut self, area: Rect, loaded: &LoadedPage) {
         let (w, h) = loaded.image.dimensions();
         let avail = area.size();
@@ -83,7 +73,6 @@ impl CBZViewerApp {
         self.has_initialised_zoom = true;
     }
 
-    // Example: Clamp pan logic
     pub fn clamp_pan(&mut self, image_dims: (u32, u32), area: Rect) {
         let (w, h) = image_dims;
         let avail = area.size();
@@ -96,19 +85,21 @@ impl CBZViewerApp {
     /// Go to the previous page (with bounds checking).
     pub fn goto_prev_page(&mut self) {
         if self.current_page == 0 {
-            self.ui_logger.warn("Already at the first page, cannot go back.");
+            self.ui_logger
+                .warn("Already at the first page, cannot go back.");
             return;
         }
         if self.double_page_mode {
             if self.current_page == 1 {
-                self.ui_logger.warn("Already at the first page, cannot go back.");
+                self.ui_logger
+                    .warn("Already at the first page, cannot go back.");
                 return;
             }
             if self.goto_page(self.current_page - 2) {
-                return; // If double page mode, go to the previous double page 
+                return; // If double page mode, go to the previous double page
             }
         }
-        self.goto_page(self.current_page - 1); 
+        self.goto_page(self.current_page - 1);
     }
 
     /// Go to the next page (with bounds checking).
@@ -118,36 +109,42 @@ impl CBZViewerApp {
                 return;
             }
         }
-        self.goto_page(self.current_page + 1); 
+        self.goto_page(self.current_page + 1);
     }
 
     /// Go to a specific page (with bounds checking).
     pub fn goto_page(&mut self, page: usize) -> bool {
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
-                self.ui_logger.warn(format!("Requested page {} is out of bounds (max: {}).", page, filenames.len() - 1));
+                self.ui_logger.warn(format!(
+                    "Requested page {} is out of bounds (max: {}).",
+                    page,
+                    filenames.len() - 1
+                ));
                 return false;
             }
             self.current_page = page;
             self.on_page_changed();
         } else {
-            self.ui_logger.warn("No filenames available to go to specific page.");
+            self.ui_logger
+                .warn("No filenames available to go to specific page.");
             return false;
         }
         return true;
     }
 
     pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
-        match CBZViewerApp::new(Some(path)) {
-            Ok(new_app) => {
-                *self = new_app;
-                return Ok(());
+        let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
+        if let Ok(guard) = archive.lock() {
+            let filenames = guard.list_images();
+            if filenames.is_empty() {
+                return Err(AppError::NoImages);
             }
-            Err(e) => {
-                self.ui_logger.error(format!("Failed to open new comic: {}", e));
-                return Err(e);
-            }
+            self.filenames = Some(filenames);
         }
+        self.archive_path = Some(path);
+        self.archive = Some(Arc::clone(&archive));
+        return Ok(());
     }
 
     /// Called whenever the page changes: resets zoom, pan, and clears texture cache.
@@ -160,8 +157,11 @@ impl CBZViewerApp {
     pub fn handle_menu_bar_file(&mut self) {
         if self.on_open_comic {
             self.on_open_comic = false;
-            if let Some(path) = rfd::FileDialog::new().add_filter("Comic Book Archive", &["cbz", "zip"]).pick_file() {
-                let _ = self.load_new_file(path); 
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Comic Book Archive", &["cbz", "zip"])
+                .pick_file()
+            {
+                let _ = self.load_new_file(path);
                 return; // Prevent further update with old state
             }
         }
@@ -233,11 +233,6 @@ impl eframe::App for CBZViewerApp {
 
             // --- Zoom with mouse wheel ---
             let input = ctx.input(|i| i.clone());
-            if input.raw_scroll_delta.y != 0.0 {
-                let zoom_factor = 1.1_f32.powf(input.raw_scroll_delta.y / 10.0);
-                self.zoom = (self.zoom * zoom_factor).clamp(0.05, 10.0);
-                self.texture_cache.clear();
-            }
 
             // Keyboard navigation
             if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
@@ -250,17 +245,26 @@ impl eframe::App for CBZViewerApp {
             if self.on_goto_page.0 {
                 self.on_goto_page.0 = false;
                 if self.goto_page(self.on_goto_page.1) {
-                    self.ui_logger.info(format!("Navigated to page {}", self.on_goto_page.1));
+                    self.ui_logger
+                        .info(format!("Navigated to page {}", self.on_goto_page.1));
                 } else {
-                    self.ui_logger.warn(format!("Failed to navigate to page {}", self.on_goto_page.1));
+                    self.ui_logger.warn(format!(
+                        "Failed to navigate to page {}",
+                        self.on_goto_page.1
+                    ));
                 }
             }
         } else {
             // No archive loaded, show a message
+            CentralPanel::default().show(ctx, |ui| {
+                ui.with_layout(egui::Layout::centered_and_justified(egui::Direction::TopDown), |ui| {
+                    ui.label(RichText::new("No Image Loaded \u{e09a}").text_style(TextStyle::Heading));
+                });
+            });
         }
         // Menu bar
         self.handle_menu_bar_file();
-        
+
         // Draw the top and bottom bars
         draw_top_bar(self, ctx, total_pages);
         draw_bottom_bar(self, ctx, total_pages);

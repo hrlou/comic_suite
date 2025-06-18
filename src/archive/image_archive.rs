@@ -1,10 +1,7 @@
 //! Image archive abstraction for zip/cbz files and folders.
 
-use std::fs::{self, File};
-use std::io::{Read};
-use std::path::{Path, PathBuf};
 use zip::read::ZipArchive;
-use crate::error::AppError;
+use crate::prelude::*;
 
 /// Represents an archive of images, either from a zip file or a folder.
 pub enum ImageArchive {
@@ -64,7 +61,11 @@ impl ZipImageArchive {
         for i in 0..zip.len() {
             let file = zip.by_index(i).unwrap();
             let name = file.name().to_string();
-            if name.ends_with(".jpg") || name.ends_with(".png") || name.ends_with(".jpeg") || name.ends_with(".gif") {
+            if name.ends_with(".jpg")
+                || name.ends_with(".png")
+                || name.ends_with(".jpeg")
+                || name.ends_with(".gif")
+            {
                 images.push(name);
             }
         }

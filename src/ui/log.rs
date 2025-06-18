@@ -1,7 +1,5 @@
 //! UI logger for warnings and errors.
 
-use std::sync::{Arc, Mutex};
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UiLogLevel {
     Warning,
@@ -14,13 +12,10 @@ pub struct UiLogger {
     pub message: Option<(String, UiLogLevel)>,
 }
 
-
 impl UiLogger {
     /// Create a new UI logger.
     pub fn new() -> Self {
-        Self {
-            message: None,
-        }
+        Self { message: None }
     }
 
     /// Log a warning (to log and UI).

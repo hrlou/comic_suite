@@ -1,19 +1,12 @@
 //! LRU cache for decoded images and async image loading.
 
-use crate::archive::ImageArchive;
-use crate::error::AppError;
-use image::{DynamicImage, GenericImageView};
-use lru::LruCache;
-use std::num::NonZeroUsize;
-use std::sync::{Arc, Mutex};
-use log::{debug, warn};
-use eframe::egui::ColorImage;
-use std::time::Instant;
+use crate::prelude::*;
 
 /// Represents a decoded page image (static or animated).
 #[derive(Clone)]
 pub enum PageImage {
     Static(DynamicImage),
+    #[allow(dead_code)]
     AnimatedGif {
         frames: Vec<eframe::egui::ColorImage>,
         delays: Vec<u16>,

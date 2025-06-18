@@ -1,7 +1,6 @@
 //! Texture cache for egui.
 
-use eframe::egui::TextureHandle;
-use log::debug;
+use crate::prelude::*;
 
 /// Key for a cached texture (page index and zoom).
 #[derive(Clone, PartialEq)]
@@ -26,7 +25,10 @@ impl TextureCache {
     /// Create a new, empty texture cache.
     pub fn new() -> Self {
         debug!("TextureCache created");
-        Self { single: None, dual: None }
+        Self {
+            single: None,
+            dual: None,
+        }
     }
 
     /// Get a single page texture if present.
@@ -37,7 +39,10 @@ impl TextureCache {
                 return Some(&pt.handle);
             }
         }
-        debug!("TextureCache miss: single page {} @ zoom {}", page_idx, zoom);
+        debug!(
+            "TextureCache miss: single page {} @ zoom {}",
+            page_idx, zoom
+        );
         None
     }
 
