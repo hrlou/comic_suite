@@ -4,4 +4,4 @@ Cargo.lock
 /*.cbz
 /app
 /.vscode
-/assets/cbw_generators
+/assets/cbw_generators/*

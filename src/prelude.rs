@@ -5,7 +5,7 @@ pub use std::io::{Cursor, Read};
 pub use std::num::NonZeroUsize;
 pub use std::path::{Path, PathBuf};
 pub use std::sync::{Arc, Mutex};
-pub use std::time::Instant;
+pub use std::time::{Duration, Instant};
 
 // external crates
 pub use eframe::{
@@ -15,7 +15,7 @@ pub use eframe::{
     },
     CreationContext,
 };
-pub use image::{DynamicImage, GenericImageView, AnimationDecoder, codecs::gif::GifDecoder};
+pub use image::{codecs::gif::GifDecoder, AnimationDecoder, DynamicImage, GenericImageView};
 pub use log::{debug, warn};
 pub use lru::LruCache;
 pub use zip::read::ZipArchive;

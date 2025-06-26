@@ -160,7 +160,10 @@ pub fn draw_dual_page(
                 disp_size1,
             ),
             egui::Rect::from_min_size(
-                egui::pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
+                egui::pos2(
+                    left_start + disp_size1.x + margin,
+                    center.y - disp_size2.y / 2.0,
+                ),
                 disp_size2,
             ),
         );
@@ -302,7 +305,11 @@ pub fn draw_gif_at_rect(
         let handle = if let Some(handle) = cache.get_animated(&key) {
             handle.clone()
         } else {
-            let new_handle = ctx.load_texture(key.clone(), frames[idx].clone(), egui::TextureOptions::default());
+            let new_handle = ctx.load_texture(
+                key.clone(),
+                frames[idx].clone(),
+                egui::TextureOptions::default(),
+            );
             cache.set_animated(key, new_handle.clone());
             new_handle
         };

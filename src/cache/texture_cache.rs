@@ -20,7 +20,7 @@ pub struct PageTexture {
 pub struct TextureCache {
     pub single: Option<PageTexture>,
     pub dual: Option<(PageTexture, Option<PageTexture>)>,
-    pub animated: HashMap<String, TextureHandle>,  // Add this line
+    pub animated: HashMap<String, TextureHandle>, // Add this line
 }
 
 impl TextureCache {
@@ -29,7 +29,7 @@ impl TextureCache {
         Self {
             single: None,
             dual: None,
-            animated: HashMap::new(),  // Initialize the new field
+            animated: HashMap::new(), // Initialize the new field
         }
     }
 
@@ -69,6 +69,6 @@ impl TextureCache {
         debug!("TextureCache cleared");
         self.single = None;
         self.dual = None;
-        self.animated.clear();  // Clear animated cache as well
+        self.animated.clear(); // Clear animated cache as well
     }
 }
