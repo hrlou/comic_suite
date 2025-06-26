@@ -1,3 +1,5 @@
+use crate::prelude::*;
+
 /// Wrapper for folders, providing access to image files (flat, no nesting).
 pub struct FolderImageArchive {
     pub path: PathBuf,
