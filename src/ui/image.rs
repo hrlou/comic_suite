@@ -65,51 +65,6 @@ fn draw_static_image(
     });
 }
 
-fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) {
-    ui.ctx().request_repaint();
-    if let PageImage::AnimatedGif {
-        frames,
-        delays,
-        start_time,
-    } = &loaded.image
-    {
-        if frames.is_empty() {
-            warn!("GIF has no frames: {}", loaded.filename);
-            return;
-        }
-
-        let elapsed = start_time.elapsed().as_millis() as u64;
-        let total_duration: u64 = delays.iter().map(|d| *d as u64 * 10).sum();
-        let mut acc = 0u64;
-        let t = elapsed % total_duration;
-        let mut idx = 0;
-        for (i, delay) in delays.iter().enumerate() {
-            let frame_time = *delay as u64 * 10;
-            if t < acc + frame_time {
-                idx = i;
-                break;
-            }
-            acc += frame_time;
-        }
-        let frame = &frames[idx];
-        let w = frame.size[0] as f32;
-        let h = frame.size[1] as f32;
-        let disp_size = Vec2::new(w * zoom, h * zoom);
-        let rect = Rect::from_center_size(area.center() + pan, disp_size);
-
-        let ctx = ui.ctx().clone();
-        let tex_name = format!("gif{}_{}", loaded.index, idx);
-        let handle = ctx.load_texture(tex_name, frame.clone(), egui::TextureOptions::default());
-
-        ui.allocate_ui_at_rect(rect, |ui| {
-            ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
-        });
-        ui.ctx().request_repaint();
-    } else {
-        warn!("draw_gif called on non-gif image");
-    }
-}
-
 /// Draw two pages side by side, using the texture cache for efficiency.
 pub fn draw_dual_page(
     ui: &mut Ui,
@@ -277,57 +232,23 @@ pub fn draw_dual_page(
     }
 }
 
-// fn draw_gif_at_rect(ui: &mut Ui, loaded: &mut LoadedPage, rect: Rect) {
-//     if let PageImage::AnimatedGif {
-//         frames,
-//         delays,
-//         start_time,
-//     } = &loaded.image
-//     {
-//         if frames.is_empty() {
-//             warn!("GIF has no frames: {}", loaded.filename);
-//             return;
-//         }
-//
-//         let elapsed = start_time.elapsed().as_millis() as u64;
-//         let total_duration: u64 = delays.iter().map(|d| *d as u64 * 10).sum();
-//         let mut acc = 0u64;
-//         let t = elapsed % total_duration;
-//
-//         let mut idx = 0;
-//         for (i, delay) in delays.iter().enumerate() {
-//             let frame_time = *delay as u64 * 10;
-//             if t < acc + frame_time {
-//                 idx = i;
-//                 break;
-//             }
-//             acc += frame_time;
-//         }
-//
-//         // Only update texture if frame changed
-//         if loaded.last_frame_idx != idx {
-//             let frame = &frames[idx];
-//             let ctx = ui.ctx().clone();
-//
-//             let handle = ctx.load_texture(
-//                 format!("gif{}", loaded.index), // Single stable ID
-//                 frame.clone(),
-//                 egui::TextureOptions::default(),
-//             );
-//
-//             loaded.gif_handle = Some(handle);
-//             loaded.last_frame_idx = idx;
-//         }
-//
-//         if let Some(handle) = &loaded.gif_handle {
-//             ui.allocate_ui_at_rect(rect, |ui| {
-//                 ui.add(Image::from_texture(handle).fit_to_exact_size(rect.size()));
-//             });
-//         }
-//
-//         ui.ctx().request_repaint();
-//     }
-// }
+fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) {
+    let (w, h) = if let PageImage::AnimatedGif { frames, .. } = &loaded.image {
+        if frames.is_empty() {
+            warn!("GIF has no frames: {}", loaded.filename);
+            return;
+        }
+        (frames[0].size[0] as f32, frames[0].size[1] as f32)
+    } else {
+        warn!("draw_gif called on non-gif image");
+        return;
+    };
+
+    let disp_size = Vec2::new(w * zoom, h * zoom);
+    let rect = Rect::from_center_size(area.center() + pan, disp_size);
+
+    draw_gif_at_rect(ui, loaded, rect, zoom, pan);
+}
 
 fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan: Vec2) {
     if let PageImage::AnimatedGif {

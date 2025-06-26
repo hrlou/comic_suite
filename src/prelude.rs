@@ -1,7 +1,7 @@
 // std
 pub use std::collections::HashSet;
 pub use std::fs::{self, File};
-pub use std::io::Read;
+pub use std::io::{Cursor, Read};
 pub use std::num::NonZeroUsize;
 pub use std::path::{Path, PathBuf};
 pub use std::sync::{Arc, Mutex};
@@ -15,7 +15,7 @@ pub use eframe::{
     },
     CreationContext,
 };
-pub use image::{DynamicImage, GenericImageView};
+pub use image::{DynamicImage, GenericImageView, AnimationDecoder, codecs::gif::GifDecoder};
 pub use log::{debug, warn};
 pub use lru::LruCache;
 pub use zip::read::ZipArchive;

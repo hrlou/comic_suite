@@ -18,7 +18,6 @@ pub struct Manifest {
     pub pages: Pages,
 }
 
-
 /// Wrapper for zip files, providing access to image files.
 pub struct ZipImageArchive {
     pub path: PathBuf,

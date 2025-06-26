@@ -67,32 +67,6 @@ pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
                     }
                 }
             });
-
-            // ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-            //    let file_label = if app.double_page_mode && app.current_page != 0 {
-            //        let left = app.current_page;
-            //        let right = (app.current_page + 1).min(total_pages.saturating_sub(1));
-            //        if app.right_to_left {
-            //            format!(
-            //                "{} | {}",
-            //                app.filenames.get(right).unwrap_or(&String::from("")),
-            //                app.filenames.get(left).unwrap_or(&String::from(""))
-            //            )
-            //        } else {
-            //            format!(
-            //                "{} | {}",
-            //                app.filenames.get(left).unwrap_or(&String::from("")),
-            //                app.filenames.get(right).unwrap_or(&String::from(""))
-            //            )
-            //        }
-            //    } else {
-            //        app.filenames
-            //            .get(app.current_page)
-            //            .cloned()
-            //            .unwrap_or_else(|| String::from(""))
-            //    };
-            //    ui.label(file_label);
-            // });
         });
     });
 }

@@ -6,7 +6,6 @@ use crate::prelude::*;
 #[derive(Clone)]
 pub enum PageImage {
     Static(DynamicImage),
-    #[allow(dead_code)]
     AnimatedGif {
         frames: Vec<eframe::egui::ColorImage>,
         delays: Vec<u16>,
@@ -77,13 +76,51 @@ pub fn load_image_async(
     std::thread::spawn(move || {
         let filename = &filenames_clone[page];
         let mut archive = archive.lock().unwrap();
-        let buf = archive.read_image(filename).unwrap(); // You must implement this!
-        let img = image::load_from_memory(&buf).unwrap();
+        let buf = archive.read_image(filename).unwrap();
+
+        let loaded_page = if filename.to_lowercase().ends_with(".gif") {
+            // Decode GIF frames
+            let cursor = Cursor::new(&buf);
+            let decoder = GifDecoder::new(cursor).unwrap();
+            let frames = decoder
+                .into_frames()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+
+            // Convert frames to egui::ColorImage and collect delays
+            let mut egui_frames = Vec::with_capacity(frames.len());
+            let mut delays = Vec::with_capacity(frames.len());
+
+            for frame in frames {
+                let delay = frame.delay().numer_denom_ms().0; // delay numerator (ms)
+                delays.push(delay as u16);
+
+                // Convert the frame to RGBA8 for egui
+                let buffer = frame.buffer();
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                    [buffer.width() as usize, buffer.height() as usize],
+                    buffer.as_raw(),
+                );
+                egui_frames.push(color_image);
+            }
+
+            PageImage::AnimatedGif {
+                frames: egui_frames,
+                delays,
+                start_time: Instant::now(),
+            }
+        } else {
+            // Static image fallback
+            let img = image::load_from_memory(&buf).unwrap();
+            PageImage::Static(img)
+        };
+
         let loaded_page = LoadedPage {
-            image: PageImage::Static(img),
+            image: loaded_page,
             index: page,
             filename: filename.clone(),
         };
+
         image_lru.lock().unwrap().put(page, loaded_page);
         loading_pages.lock().unwrap().remove(&page);
         debug!("Loaded image page {} into LRU cache", page);
