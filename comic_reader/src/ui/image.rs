@@ -1,0 +1,424 @@
+//! Image drawing helpers for egui.
+
+use crate::prelude::*;
+
+/// Draw a centered spinner in the given area.
+pub fn draw_spinner(ui: &mut Ui, area: Rect) {
+    let spinner_size = 48.0;
+    let spinner_rect = Rect::from_center_size(area.center(), Vec2::splat(spinner_size));
+    ui.allocate_ui_at_rect(spinner_rect, |ui| {
+        ui.add(Spinner::new().size(spinner_size).color(Color32::WHITE));
+    });
+}
+
+/// Draw a single page image, using the texture cache for efficiency.
+pub fn draw_single_page(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    area: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
+    match &loaded.image {
+        PageImage::AnimatedGif { .. } => draw_gif(ui, loaded, area, zoom, pan, cache),
+        PageImage::Static(_) => draw_static_image(ui, loaded, area, zoom, pan, cache),
+    }
+}
+
+fn draw_static_image(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    area: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
+    let (w, h) = match &loaded.image {
+        PageImage::Static(img) => img.dimensions(),
+        _ => return,
+    };
+    let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
+
+    let ctx = ui.ctx().clone();
+    let handle = if let Some(handle) = cache.get_single(loaded.index, zoom) {
+        handle.clone()
+    } else {
+        let color_img = match &loaded.image {
+            PageImage::Static(img) => {
+                egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &img.to_rgba8())
+            }
+            _ => return,
+        };
+        let handle = ctx.load_texture(
+            format!("tex{}_{}", loaded.index, zoom),
+            color_img,
+            egui::TextureOptions::default(),
+        );
+        cache.set_single(loaded.index, zoom, handle.clone());
+        handle
+    };
+
+    let rect = Rect::from_center_size(area.center() + pan, disp_size);
+    ui.allocate_ui_at_rect(rect, |ui| {
+        ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
+    });
+}
+
+/// Draw two pages side by side, using the texture cache for efficiency.
+pub fn draw_dual_page(
+    ui: &mut Ui,
+    loaded_left: &LoadedPage,
+    loaded_right: Option<&LoadedPage>,
+    area: Rect,
+    zoom: f32,
+    margin: f32,
+    left_first: bool,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
+    // Left page size
+    let (w1, h1) = match &loaded_left.image {
+        PageImage::Static(img) => img.dimensions(),
+        PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
+            (frames[0].size[0] as u32, frames[0].size[1] as u32)
+        }
+        _ => return,
+    };
+    let disp_size1 = Vec2::new(w1 as f32 * zoom, h1 as f32 * zoom);
+
+    let ctx = ui.ctx().clone();
+    let handle1 = if let PageImage::Static(_) = &loaded_left.image {
+        if let Some(handle) = cache.get_single(loaded_left.index, zoom) {
+            Some(handle.clone())
+        } else {
+            let color_img1 = match &loaded_left.image {
+                PageImage::Static(img) => egui::ColorImage::from_rgba_unmultiplied(
+                    [w1 as usize, h1 as usize],
+                    &img.to_rgba8(),
+                ),
+                _ => return,
+            };
+            let handle = ctx.load_texture(
+                format!("tex{}_{}", loaded_left.index, zoom),
+                color_img1,
+                egui::TextureOptions::default(),
+            );
+            cache.set_single(loaded_left.index, zoom, handle.clone());
+            Some(handle)
+        }
+    } else {
+        None
+    };
+
+    // Right page size and handle
+    let (handle2, disp_size2) = if let Some(loaded2) = loaded_right {
+        let (w2, h2) = match &loaded2.image {
+            PageImage::Static(img) => img.dimensions(),
+            PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
+                (frames[0].size[0] as u32, frames[0].size[1] as u32)
+            }
+            _ => return,
+        };
+        let disp_size2 = Vec2::new(w2 as f32 * zoom, h2 as f32 * zoom);
+        let handle2 = if let PageImage::Static(_) = &loaded2.image {
+            if let Some(handle) = cache.get_single(loaded2.index, zoom) {
+                Some(handle.clone())
+            } else {
+                let color_img2 = match &loaded2.image {
+                    PageImage::Static(img) => egui::ColorImage::from_rgba_unmultiplied(
+                        [w2 as usize, h2 as usize],
+                        &img.to_rgba8(),
+                    ),
+                    _ => return,
+                };
+                let handle = ctx.load_texture(
+                    format!("tex{}_{}", loaded2.index, zoom),
+                    color_img2,
+                    egui::TextureOptions::default(),
+                );
+                cache.set_single(loaded2.index, zoom, handle.clone());
+                Some(handle)
+            }
+        } else {
+            None
+        };
+        (handle2, Some(disp_size2))
+    } else {
+        (None, None)
+    };
+
+    let center = area.center() + pan;
+
+    if let (Some(disp_size2), Some(handle2)) = (disp_size2, handle2) {
+        let total_width = disp_size1.x + disp_size2.x + margin;
+        let left_start = center.x - total_width / 2.0;
+
+        let (rect_left, rect_right) = (
+            egui::Rect::from_min_size(
+                egui::pos2(left_start, center.y - disp_size1.y / 2.0),
+                disp_size1,
+            ),
+            egui::Rect::from_min_size(
+                egui::pos2(
+                    left_start + disp_size1.x + margin,
+                    center.y - disp_size2.y / 2.0,
+                ),
+                disp_size2,
+            ),
+        );
+
+        if left_first {
+            match &loaded_left.image {
+                PageImage::AnimatedGif { .. } => {
+                    draw_gif_at_rect(ui, loaded_left, rect_left, zoom, pan, cache);
+                }
+                PageImage::Static(_) => {
+                    if let Some(handle1) = &handle1 {
+                        ui.allocate_ui_at_rect(rect_left, |ui| {
+                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                        });
+                    }
+                }
+            }
+            match &loaded_right {
+                Some(loaded2) => match &loaded2.image {
+                    PageImage::AnimatedGif { .. } => {
+                        draw_gif_at_rect(ui, loaded2, rect_right, zoom, pan, cache);
+                    }
+                    PageImage::Static(_) => {
+                        ui.allocate_ui_at_rect(rect_right, |ui| {
+                            ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
+                        });
+                    }
+                },
+                None => (),
+            }
+        } else {
+            match &loaded_right {
+                Some(loaded2) => match &loaded2.image {
+                    PageImage::AnimatedGif { .. } => {
+                        draw_gif_at_rect(ui, loaded2, rect_left, zoom, pan, cache);
+                    }
+                    PageImage::Static(_) => {
+                        ui.allocate_ui_at_rect(rect_left, |ui| {
+                            ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
+                        });
+                    }
+                },
+                None => (),
+            }
+            match &loaded_left.image {
+                PageImage::AnimatedGif { .. } => {
+                    draw_gif_at_rect(ui, loaded_left, rect_right, zoom, pan, cache);
+                }
+                PageImage::Static(_) => {
+                    if let Some(handle1) = &handle1 {
+                        ui.allocate_ui_at_rect(rect_right, |ui| {
+                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                        });
+                    }
+                }
+            }
+        }
+    } else {
+        let rect = egui::Rect::from_center_size(area.center() + pan, disp_size1);
+        match &loaded_left.image {
+            PageImage::AnimatedGif { .. } => {
+                draw_gif_at_rect(ui, loaded_left, rect, zoom, pan, cache);
+            }
+            PageImage::Static(_) => {
+                if let Some(handle1) = &handle1 {
+                    ui.allocate_ui_at_rect(rect, |ui| {
+                        ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Draw a GIF in the given area by forwarding to `draw_gif_at_rect` (calls must pass cache).
+pub fn draw_gif(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    area: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
+    let (w, h) = if let PageImage::AnimatedGif { frames, .. } = &loaded.image {
+        if frames.is_empty() {
+            warn!("GIF has no frames: {}", loaded.filename);
+            return;
+        }
+        (frames[0].size[0] as f32, frames[0].size[1] as f32)
+    } else {
+        warn!("draw_gif called on non-gif image");
+        return;
+    };
+
+    let disp_size = Vec2::new(w * zoom, h * zoom);
+    let rect = Rect::from_center_size(area.center() + pan, disp_size);
+
+    draw_gif_at_rect(ui, loaded, rect, zoom, pan, cache);
+}
+
+/// Draw a GIF at the specified rect, using the texture cache to avoid reloads.
+pub fn draw_gif_at_rect(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    rect: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
+    if let PageImage::AnimatedGif {
+        frames,
+        delays,
+        start_time,
+    } = &loaded.image
+    {
+        if frames.is_empty() {
+            warn!("GIF has no frames: {}", loaded.filename);
+            return;
+        }
+
+        let elapsed = start_time.elapsed().as_millis() as u64;
+        let total_duration: u64 = delays.iter().map(|d| *d as u64).sum();
+        let t = elapsed % total_duration;
+
+        let mut acc = 0u64;
+        let mut idx = 0;
+        for (i, delay) in delays.iter().enumerate() {
+            let frame_time = *delay as u64;
+            if t < acc + frame_time {
+                idx = i;
+                break;
+            }
+            acc += frame_time;
+        }
+
+        let ctx = ui.ctx().clone();
+        let key = format!("gif{}_{}", loaded.index, idx);
+
+        let handle = if let Some(handle) = cache.get_animated(&key) {
+            handle.clone()
+        } else {
+            let new_handle = ctx.load_texture(
+                key.clone(),
+                frames[idx].clone(),
+                egui::TextureOptions::default(),
+            );
+            cache.set_animated(key, new_handle.clone());
+            new_handle
+        };
+
+        ui.allocate_ui_at_rect(rect, |ui| {
+            ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
+        });
+
+        ui.ctx().request_repaint();
+    }
+}
+
+/// Gently clamp the pan offset to keep the image inside the viewing area.
+/// This acts like a soft spring rather than a hard limit.
+pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
+    let (w, h) = image_dims;
+    let avail = area.size();
+
+    // Max scrollable distance from center in each direction
+    let max_x = ((w as f32 * app.zoom - avail.x) / 2.0).max(0.0);
+    let max_y = ((h as f32 * app.zoom - avail.y) / 2.0).max(0.0);
+
+    // Spring stiffness factor: 0 = no correction, 1 = instant clamp
+    let k = 0.2;
+
+    let target_x = app.pan_offset.x.clamp(-max_x, max_x);
+    let target_y = app.pan_offset.y.clamp(-max_y, max_y);
+
+    app.pan_offset.x += (target_x - app.pan_offset.x) * k;
+    app.pan_offset.y += (target_y - app.pan_offset.y) * k;
+}
+
+/// Adjust the pan offset based on drag input.
+/// Records starting position and moves the view with the drag delta.
+pub fn handle_pan(
+    pan_offset: &mut Vec2,
+    drag_start: &mut Option<egui::Pos2>,
+    response: &egui::Response,
+    texture_cache: &mut TextureCache,
+) {
+    if response.drag_started() {
+        *drag_start = response.interact_pointer_pos();
+    }
+
+    if response.dragged() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            if let Some(start) = *drag_start {
+                let delta = pos - start;
+                *pan_offset += delta;
+                *drag_start = Some(pos);
+                texture_cache.clear(); // Force redraw due to view change
+            }
+        }
+    }
+
+    if response.drag_stopped() {
+        *drag_start = None;
+    }
+}
+
+/// Handle zooming centered at the cursor position.
+///
+/// `zoom`: current zoom level.
+/// `pan_offset`: current pan offset (will be adjusted).
+/// `cursor_pos`: cursor position in screen coords.
+/// `area_rect`: rect of the image/view in screen coords.
+/// `scroll_delta_y`: vertical scroll delta (positive to zoom in).
+/// `min_zoom`, `max_zoom`: zoom clamp range.
+/// `texture_cache`: texture cache to clear on zoom change.
+/// `has_initialised_zoom`: mutable flag to track first zoom event.
+///
+/// Returns true if zoom changed.
+pub fn handle_zoom(
+    zoom: &mut f32,
+    pan_offset: &mut egui::Vec2,
+    cursor_pos: egui::Pos2,
+    area_rect: egui::Rect,
+    scroll_delta_y: f32,
+    min_zoom: f32,
+    max_zoom: f32,
+    texture_cache: &mut TextureCache,
+    has_initialised_zoom: &mut bool,
+) -> bool {
+    let zoom_speed = 1.1;
+    let old_zoom = *zoom;
+
+    if scroll_delta_y > 0.0 {
+        *zoom = (*zoom * zoom_speed).min(max_zoom);
+    } else if scroll_delta_y < 0.0 {
+        *zoom = (*zoom / zoom_speed).max(min_zoom);
+    }
+
+    if (*zoom - old_zoom).abs() > f32::EPSILON {
+        // Convert cursor pos from screen space to image local coords relative to center
+        let cursor_rel = egui::vec2(
+            cursor_pos.x - area_rect.center().x,
+            cursor_pos.y - area_rect.center().y,
+        );
+
+        // Calculate zoom factor change
+        let zoom_factor = *zoom / old_zoom;
+
+        // Adjust pan so zoom centers on cursor position
+        *pan_offset = (*pan_offset - cursor_rel) * zoom_factor + cursor_rel;
+
+        *has_initialised_zoom = true;
+        texture_cache.clear();
+        return true;
+    }
+
+    false
+}
