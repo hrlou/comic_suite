@@ -21,7 +21,7 @@ pub fn draw_single_page(
     cache: &mut TextureCache,
 ) {
     match &loaded.image {
-        PageImage::AnimatedGif { .. } => draw_gif(ui, loaded, area, zoom, pan),
+        PageImage::AnimatedGif { .. } => draw_gif(ui, loaded, area, zoom, pan, cache),
         PageImage::Static(_) => draw_static_image(ui, loaded, area, zoom, pan, cache),
     }
 }
@@ -77,7 +77,7 @@ pub fn draw_dual_page(
     pan: Vec2,
     cache: &mut TextureCache,
 ) {
-    // Left page
+    // Left page size
     let (w1, h1) = match &loaded_left.image {
         PageImage::Static(img) => img.dimensions(),
         PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
@@ -111,6 +111,7 @@ pub fn draw_dual_page(
         None
     };
 
+    // Right page size and handle
     let (handle2, disp_size2) = if let Some(loaded2) = loaded_right {
         let (w2, h2) = match &loaded2.image {
             PageImage::Static(img) => img.dimensions(),
@@ -148,6 +149,7 @@ pub fn draw_dual_page(
     };
 
     let center = area.center() + pan;
+
     if let (Some(disp_size2), Some(handle2)) = (disp_size2, handle2) {
         let total_width = disp_size1.x + disp_size2.x + margin;
         let left_start = center.x - total_width / 2.0;
@@ -158,10 +160,7 @@ pub fn draw_dual_page(
                 disp_size1,
             ),
             egui::Rect::from_min_size(
-                egui::pos2(
-                    left_start + disp_size1.x + margin,
-                    center.y - disp_size2.y / 2.0,
-                ),
+                egui::pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y / 2.0),
                 disp_size2,
             ),
         );
@@ -169,7 +168,7 @@ pub fn draw_dual_page(
         if left_first {
             match &loaded_left.image {
                 PageImage::AnimatedGif { .. } => {
-                    draw_gif_at_rect(ui, loaded_left, rect_left, zoom, pan)
+                    draw_gif_at_rect(ui, loaded_left, rect_left, zoom, pan, cache);
                 }
                 PageImage::Static(_) => {
                     if let Some(handle1) = &handle1 {
@@ -179,34 +178,36 @@ pub fn draw_dual_page(
                     }
                 }
             }
-            if let Some(loaded2) = loaded_right {
-                match &loaded2.image {
+            match &loaded_right {
+                Some(loaded2) => match &loaded2.image {
                     PageImage::AnimatedGif { .. } => {
-                        draw_gif_at_rect(ui, loaded2, rect_right, zoom, pan)
+                        draw_gif_at_rect(ui, loaded2, rect_right, zoom, pan, cache);
                     }
                     PageImage::Static(_) => {
                         ui.allocate_ui_at_rect(rect_right, |ui| {
                             ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
                         });
                     }
-                }
+                },
+                None => (),
             }
         } else {
-            if let Some(loaded2) = loaded_right {
-                match &loaded2.image {
+            match &loaded_right {
+                Some(loaded2) => match &loaded2.image {
                     PageImage::AnimatedGif { .. } => {
-                        draw_gif_at_rect(ui, loaded2, rect_left, zoom, pan)
+                        draw_gif_at_rect(ui, loaded2, rect_left, zoom, pan, cache);
                     }
                     PageImage::Static(_) => {
                         ui.allocate_ui_at_rect(rect_left, |ui| {
                             ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
                         });
                     }
-                }
+                },
+                None => (),
             }
             match &loaded_left.image {
                 PageImage::AnimatedGif { .. } => {
-                    draw_gif_at_rect(ui, loaded_left, rect_right, zoom, pan)
+                    draw_gif_at_rect(ui, loaded_left, rect_right, zoom, pan, cache);
                 }
                 PageImage::Static(_) => {
                     if let Some(handle1) = &handle1 {
@@ -220,7 +221,9 @@ pub fn draw_dual_page(
     } else {
         let rect = egui::Rect::from_center_size(area.center() + pan, disp_size1);
         match &loaded_left.image {
-            PageImage::AnimatedGif { .. } => draw_gif_at_rect(ui, loaded_left, rect, zoom, pan),
+            PageImage::AnimatedGif { .. } => {
+                draw_gif_at_rect(ui, loaded_left, rect, zoom, pan, cache);
+            }
             PageImage::Static(_) => {
                 if let Some(handle1) = &handle1 {
                     ui.allocate_ui_at_rect(rect, |ui| {
@@ -232,7 +235,15 @@ pub fn draw_dual_page(
     }
 }
 
-fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) {
+/// Draw a GIF in the given area by forwarding to `draw_gif_at_rect` (calls must pass cache).
+pub fn draw_gif(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    area: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
     let (w, h) = if let PageImage::AnimatedGif { frames, .. } = &loaded.image {
         if frames.is_empty() {
             warn!("GIF has no frames: {}", loaded.filename);
@@ -247,10 +258,18 @@ fn draw_gif(ui: &mut Ui, loaded: &LoadedPage, area: Rect, zoom: f32, pan: Vec2) 
     let disp_size = Vec2::new(w * zoom, h * zoom);
     let rect = Rect::from_center_size(area.center() + pan, disp_size);
 
-    draw_gif_at_rect(ui, loaded, rect, zoom, pan);
+    draw_gif_at_rect(ui, loaded, rect, zoom, pan, cache);
 }
 
-fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan: Vec2) {
+/// Draw a GIF at the specified rect, using the texture cache to avoid reloads.
+pub fn draw_gif_at_rect(
+    ui: &mut Ui,
+    loaded: &LoadedPage,
+    rect: Rect,
+    zoom: f32,
+    pan: Vec2,
+    cache: &mut TextureCache,
+) {
     if let PageImage::AnimatedGif {
         frames,
         delays,
@@ -261,29 +280,37 @@ fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan
             warn!("GIF has no frames: {}", loaded.filename);
             return;
         }
+
         let elapsed = start_time.elapsed().as_millis() as u64;
-        let total_duration: u64 = delays.iter().map(|d| *d as u64 * 10).sum();
-        let mut acc = 0u64;
+        let total_duration: u64 = delays.iter().map(|d| *d as u64).sum();
         let t = elapsed % total_duration;
+
+        let mut acc = 0u64;
         let mut idx = 0;
         for (i, delay) in delays.iter().enumerate() {
-            let frame_time = *delay as u64 * 10;
+            let frame_time = *delay as u64;
             if t < acc + frame_time {
                 idx = i;
                 break;
             }
             acc += frame_time;
         }
-        let frame = &frames[idx];
+
         let ctx = ui.ctx().clone();
-        let handle = ctx.load_texture(
-            format!("gif{}_{}", loaded.index, idx),
-            frame.clone(),
-            egui::TextureOptions::default(),
-        );
+        let key = format!("gif{}_{}", loaded.index, idx);
+
+        let handle = if let Some(handle) = cache.get_animated(&key) {
+            handle.clone()
+        } else {
+            let new_handle = ctx.load_texture(key.clone(), frames[idx].clone(), egui::TextureOptions::default());
+            cache.set_animated(key, new_handle.clone());
+            new_handle
+        };
+
         ui.allocate_ui_at_rect(rect, |ui| {
             ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
         });
+
         ui.ctx().request_repaint();
     }
 }
