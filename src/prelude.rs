@@ -18,6 +18,7 @@ pub use eframe::{
 pub use image::{DynamicImage, GenericImageView};
 pub use log::{debug, warn};
 pub use lru::LruCache;
+pub use zip::read::ZipArchive;
 
 // crate modules
 pub use crate::{
