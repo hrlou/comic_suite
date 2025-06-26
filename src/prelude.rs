@@ -10,9 +10,8 @@ pub use std::time::Instant;
 // external crates
 pub use eframe::{
     egui::{
-        self, CentralPanel, Color32, Context, FontData, FontDefinitions, FontFamily,
-        FontId, Image, Layout, Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui,
-        Vec2, Pos2
+        self, CentralPanel, Color32, Context, FontData, FontDefinitions, FontFamily, FontId, Image,
+        Layout, Pos2, Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui, Vec2,
     },
     CreationContext,
 };

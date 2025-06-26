@@ -1,6 +1,5 @@
 //! Main application state and logic.
 
-
 use eframe::egui::gui_zoom::kb_shortcuts;
 
 use crate::prelude::*;
@@ -216,7 +215,7 @@ impl eframe::App for CBZViewerApp {
                     &mut self.texture_cache, // pass cursor_pos here
                     &mut self.has_initialised_zoom,
                 );
-            
+
                 if zoomed {
                     // adjust pan offset here based on cursor_pos and zoom change
                 }
@@ -229,7 +228,7 @@ impl eframe::App for CBZViewerApp {
 
                 clamp_pan(self, image_dims_approx, response.rect);
             }
-            
+
             // Preload images for current view and next pages
             let mut pages_to_preload = vec![self.current_page];
             for offset in 1..=READ_AHEAD {

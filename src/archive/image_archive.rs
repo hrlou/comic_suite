@@ -53,20 +53,46 @@ pub struct ZipImageArchive {
 }
 
 impl ZipImageArchive {
+    // pub fn list_images(&self) -> Vec<String> {
+    //     // Open zip and list image files
+    //     let file = File::open(&self.path).unwrap();
+    //     let mut zip = ZipArchive::new(file).unwrap();
+    //     let mut images = Vec::new();
+    //     for i in 0..zip.len() {
+    //         let file = zip.by_index(i).unwrap();
+    //         let name = file.name().to_string();
+    //         if name.ends_with(".jpg")
+    //             || name.ends_with(".png")
+    //             || name.ends_with(".jpeg")
+    //             || name.ends_with(".gif")
+    //         {
+    //             images.push(name);
+    //         }
+    //     }
+    //     images
+    // }
+
     pub fn list_images(&self) -> Vec<String> {
-        // Open zip and list image files
-        let file = File::open(&self.path).unwrap();
-        let mut zip = ZipArchive::new(file).unwrap();
+        let file = match File::open(&self.path) {
+            Ok(f) => f,
+            Err(_) => return vec![],
+        };
+        let mut zip = match ZipArchive::new(file) {
+            Ok(z) => z,
+            Err(_) => return vec![],
+        };
+
         let mut images = Vec::new();
         for i in 0..zip.len() {
-            let file = zip.by_index(i).unwrap();
-            let name = file.name().to_string();
-            if name.ends_with(".jpg")
-                || name.ends_with(".png")
-                || name.ends_with(".jpeg")
-                || name.ends_with(".gif")
-            {
-                images.push(name);
+            if let Ok(file) = zip.by_index(i) {
+                let name = file.name().to_string();
+                if name.ends_with(".jpg")
+                    || name.ends_with(".jpeg")
+                    || name.ends_with(".png")
+                    || name.ends_with(".gif")
+                {
+                    images.push(name);
+                }
             }
         }
         images

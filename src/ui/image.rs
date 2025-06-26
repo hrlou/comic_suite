@@ -277,6 +277,58 @@ pub fn draw_dual_page(
     }
 }
 
+// fn draw_gif_at_rect(ui: &mut Ui, loaded: &mut LoadedPage, rect: Rect) {
+//     if let PageImage::AnimatedGif {
+//         frames,
+//         delays,
+//         start_time,
+//     } = &loaded.image
+//     {
+//         if frames.is_empty() {
+//             warn!("GIF has no frames: {}", loaded.filename);
+//             return;
+//         }
+//
+//         let elapsed = start_time.elapsed().as_millis() as u64;
+//         let total_duration: u64 = delays.iter().map(|d| *d as u64 * 10).sum();
+//         let mut acc = 0u64;
+//         let t = elapsed % total_duration;
+//
+//         let mut idx = 0;
+//         for (i, delay) in delays.iter().enumerate() {
+//             let frame_time = *delay as u64 * 10;
+//             if t < acc + frame_time {
+//                 idx = i;
+//                 break;
+//             }
+//             acc += frame_time;
+//         }
+//
+//         // Only update texture if frame changed
+//         if loaded.last_frame_idx != idx {
+//             let frame = &frames[idx];
+//             let ctx = ui.ctx().clone();
+//
+//             let handle = ctx.load_texture(
+//                 format!("gif{}", loaded.index), // Single stable ID
+//                 frame.clone(),
+//                 egui::TextureOptions::default(),
+//             );
+//
+//             loaded.gif_handle = Some(handle);
+//             loaded.last_frame_idx = idx;
+//         }
+//
+//         if let Some(handle) = &loaded.gif_handle {
+//             ui.allocate_ui_at_rect(rect, |ui| {
+//                 ui.add(Image::from_texture(handle).fit_to_exact_size(rect.size()));
+//             });
+//         }
+//
+//         ui.ctx().request_repaint();
+//     }
+// }
+
 fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan: Vec2) {
     if let PageImage::AnimatedGif {
         frames,
@@ -314,7 +366,6 @@ fn draw_gif_at_rect(ui: &mut Ui, loaded: &LoadedPage, rect: Rect, zoom: f32, pan
         ui.ctx().request_repaint();
     }
 }
-
 
 /// Gently clamp the pan offset to keep the image inside the viewing area.
 /// This acts like a soft spring rather than a hard limit.
@@ -365,7 +416,7 @@ pub fn handle_pan(
 }
 
 /// Handle zooming centered at the cursor position.
-/// 
+///
 /// `zoom`: current zoom level.
 /// `pan_offset`: current pan offset (will be adjusted).
 /// `cursor_pos`: cursor position in screen coords.
@@ -374,7 +425,7 @@ pub fn handle_pan(
 /// `min_zoom`, `max_zoom`: zoom clamp range.
 /// `texture_cache`: texture cache to clear on zoom change.
 /// `has_initialised_zoom`: mutable flag to track first zoom event.
-/// 
+///
 /// Returns true if zoom changed.
 pub fn handle_zoom(
     zoom: &mut f32,
