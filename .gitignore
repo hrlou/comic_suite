@@ -1,7 +1,32 @@
-Cargo.lock
+# === Rust & Cargo ===
 /target
-/dist
-/*.cbz
-/app
-/.vscode
-/assets/cbw_generators/*
+**/target
+Cargo.lock
+
+# === IDEs & Editors ===
+/.vscode/
+/.idea/
+/*.code-workspace
+
+# === OS Generated ===
+.DS_Store
+Thumbs.db
+
+# === Build & Output ===
+/dist/
+/app/
+
+# === Temporary Files ===
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# === Workspace-specific ===
+/cbw_generators/
+
+# === Ignore test results, cache, etc. ===
+/debug/
+.release/
+*.dSYM/

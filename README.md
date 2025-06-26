@@ -11,7 +11,7 @@ Comic book web file.
 ```
 webcomic.cbw
 ├── manifest.toml   # TOML manifest
-└── thumbnails/     # optional: small preview versions (if included/generated)
+└── thumb.jpg    	# optional: thumbnail
 ```
 Manifest:
 ```toml
