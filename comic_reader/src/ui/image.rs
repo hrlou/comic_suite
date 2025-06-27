@@ -77,73 +77,58 @@ pub fn draw_dual_page(
     pan: Vec2,
     cache: &mut TextureCache,
 ) {
-    // Left page size
-    let (w1, h1) = match &loaded_left.image {
-        PageImage::Static(img) => img.dimensions(),
-        PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
-            (frames[0].size[0] as u32, frames[0].size[1] as u32)
-        }
-        _ => return,
-    };
-    let disp_size1 = Vec2::new(w1 as f32 * zoom, h1 as f32 * zoom);
+    let ctx = ui.ctx().clone(); // clone context early to avoid ui borrow conflicts
 
-    let ctx = ui.ctx().clone();
-    let handle1 = if let PageImage::Static(_) = &loaded_left.image {
-        if let Some(handle) = cache.get_single(loaded_left.index, zoom) {
-            Some(handle.clone())
-        } else {
-            let color_img1 = match &loaded_left.image {
-                PageImage::Static(img) => egui::ColorImage::from_rgba_unmultiplied(
-                    [w1 as usize, h1 as usize],
-                    &img.to_rgba8(),
-                ),
-                _ => return,
-            };
-            let handle = ctx.load_texture(
-                format!("tex{}_{}", loaded_left.index, zoom),
-                color_img1,
-                egui::TextureOptions::default(),
-            );
-            cache.set_single(loaded_left.index, zoom, handle.clone());
-            Some(handle)
-        }
-    } else {
-        None
-    };
-
-    // Right page size and handle
-    let (handle2, disp_size2) = if let Some(loaded2) = loaded_right {
-        let (w2, h2) = match &loaded2.image {
+    // Helper function: returns display size and owned clone of texture handle (if any)
+    fn get_page_data(
+        page: &LoadedPage,
+        zoom: f32,
+        cache: &mut TextureCache,
+        ctx: &egui::Context,
+    ) -> Option<(Vec2, Option<egui::TextureHandle>)> {
+        let (w, h) = match &page.image {
             PageImage::Static(img) => img.dimensions(),
             PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
                 (frames[0].size[0] as u32, frames[0].size[1] as u32)
             }
-            _ => return,
+            _ => return None,
         };
-        let disp_size2 = Vec2::new(w2 as f32 * zoom, h2 as f32 * zoom);
-        let handle2 = if let PageImage::Static(_) = &loaded2.image {
-            if let Some(handle) = cache.get_single(loaded2.index, zoom) {
-                Some(handle.clone())
+        let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
+
+        let handle = if let PageImage::Static(img) = &page.image {
+            if let Some(handle) = cache.get_single(page.index, zoom) {
+                Some(handle.clone()) // clone owned handle, no borrow leak
             } else {
-                let color_img2 = match &loaded2.image {
-                    PageImage::Static(img) => egui::ColorImage::from_rgba_unmultiplied(
-                        [w2 as usize, h2 as usize],
-                        &img.to_rgba8(),
-                    ),
-                    _ => return,
-                };
+                let rgba_bytes = img.to_rgba8();
+                let color_img = egui::ColorImage::from_rgba_unmultiplied(
+                    [w as usize, h as usize],
+                    rgba_bytes.as_flat_samples().as_slice(),
+                );
                 let handle = ctx.load_texture(
-                    format!("tex{}_{}", loaded2.index, zoom),
-                    color_img2,
+                    format!("tex{}_{}", page.index, zoom),
+                    color_img,
                     egui::TextureOptions::default(),
                 );
-                cache.set_single(loaded2.index, zoom, handle.clone());
+                cache.set_single(page.index, zoom, handle.clone());
                 Some(handle)
             }
         } else {
             None
         };
-        (handle2, Some(disp_size2))
+
+        Some((disp_size, handle))
+    }
+
+    let (disp_size1, handle1) = match get_page_data(loaded_left, zoom, cache, &ctx) {
+        Some(data) => data,
+        None => return,
+    };
+
+    let (disp_size2, handle2) = if let Some(loaded2) = loaded_right {
+        match get_page_data(loaded2, zoom, cache, &ctx) {
+            Some(data) => (Some(data.0), data.1),
+            None => (None, None),
+        }
     } else {
         (None, None)
     };
@@ -152,20 +137,15 @@ pub fn draw_dual_page(
 
     if let (Some(disp_size2), Some(handle2)) = (disp_size2, handle2) {
         let total_width = disp_size1.x + disp_size2.x + margin;
-        let left_start = center.x - total_width / 2.0;
+        let left_start = center.x - total_width * 0.5;
 
-        let (rect_left, rect_right) = (
-            egui::Rect::from_min_size(
-                egui::pos2(left_start, center.y - disp_size1.y / 2.0),
-                disp_size1,
-            ),
-            egui::Rect::from_min_size(
-                egui::pos2(
-                    left_start + disp_size1.x + margin,
-                    center.y - disp_size2.y / 2.0,
-                ),
-                disp_size2,
-            ),
+        let rect_left = egui::Rect::from_min_size(
+            egui::pos2(left_start, center.y - disp_size1.y * 0.5),
+            disp_size1,
+        );
+        let rect_right = egui::Rect::from_min_size(
+            egui::pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y * 0.5),
+            disp_size2,
         );
 
         if left_first {
@@ -174,15 +154,15 @@ pub fn draw_dual_page(
                     draw_gif_at_rect(ui, loaded_left, rect_left, zoom, pan, cache);
                 }
                 PageImage::Static(_) => {
-                    if let Some(handle1) = &handle1 {
+                    if let Some(handle) = handle1 {
                         ui.allocate_ui_at_rect(rect_left, |ui| {
-                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                            ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size1));
                         });
                     }
                 }
             }
-            match &loaded_right {
-                Some(loaded2) => match &loaded2.image {
+            if let Some(loaded2) = loaded_right {
+                match &loaded2.image {
                     PageImage::AnimatedGif { .. } => {
                         draw_gif_at_rect(ui, loaded2, rect_right, zoom, pan, cache);
                     }
@@ -191,12 +171,11 @@ pub fn draw_dual_page(
                             ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
                         });
                     }
-                },
-                None => (),
+                }
             }
         } else {
-            match &loaded_right {
-                Some(loaded2) => match &loaded2.image {
+            if let Some(loaded2) = loaded_right {
+                match &loaded2.image {
                     PageImage::AnimatedGif { .. } => {
                         draw_gif_at_rect(ui, loaded2, rect_left, zoom, pan, cache);
                     }
@@ -205,32 +184,31 @@ pub fn draw_dual_page(
                             ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
                         });
                     }
-                },
-                None => (),
+                }
             }
             match &loaded_left.image {
                 PageImage::AnimatedGif { .. } => {
                     draw_gif_at_rect(ui, loaded_left, rect_right, zoom, pan, cache);
                 }
                 PageImage::Static(_) => {
-                    if let Some(handle1) = &handle1 {
+                    if let Some(handle) = handle1 {
                         ui.allocate_ui_at_rect(rect_right, |ui| {
-                            ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                            ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size1));
                         });
                     }
                 }
             }
         }
     } else {
-        let rect = egui::Rect::from_center_size(area.center() + pan, disp_size1);
+        let rect = egui::Rect::from_center_size(center, disp_size1);
         match &loaded_left.image {
             PageImage::AnimatedGif { .. } => {
                 draw_gif_at_rect(ui, loaded_left, rect, zoom, pan, cache);
             }
             PageImage::Static(_) => {
-                if let Some(handle1) = &handle1 {
+                if let Some(handle) = handle1 {
                     ui.allocate_ui_at_rect(rect, |ui| {
-                        ui.add(Image::from_texture(handle1).fit_to_exact_size(disp_size1));
+                        ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size1));
                     });
                 }
             }
@@ -375,7 +353,6 @@ pub fn handle_pan(
     }
 }
 
-
 /// Handle zooming centered at the cursor position.
 ///
 /// `zoom`: current zoom level.
@@ -399,28 +376,25 @@ pub fn handle_zoom(
     texture_cache: &mut TextureCache,
     has_initialised_zoom: &mut bool,
 ) -> bool {
-    let zoom_speed = 1.1;
-    let old_zoom = *zoom;
-
-    if scroll_delta_y > 0.0 {
-        *zoom = (*zoom * zoom_speed).min(max_zoom);
-    } else if scroll_delta_y < 0.0 {
-        *zoom = (*zoom / zoom_speed).max(min_zoom);
+    if scroll_delta_y.abs() < f32::EPSILON {
+        return false;
     }
 
+    let old_zoom = *zoom;
+    let zoom_sensitivity = 0.1;
+
+    // Continuous zooming using scroll delta
+    let zoom_factor = (1.0 + zoom_sensitivity * scroll_delta_y).clamp(0.5, 2.0);
+    *zoom = (*zoom * zoom_factor).clamp(min_zoom, max_zoom);
+
     if (*zoom - old_zoom).abs() > f32::EPSILON {
-        // Convert cursor pos from screen space to image local coords relative to center
         let cursor_rel = egui::vec2(
             cursor_pos.x - area_rect.center().x,
             cursor_pos.y - area_rect.center().y,
         );
+        let effective_factor = *zoom / old_zoom;
 
-        // Calculate zoom factor change
-        let zoom_factor = *zoom / old_zoom;
-
-        // Adjust pan so zoom centers on cursor position
-        *pan_offset = (*pan_offset - cursor_rel) * zoom_factor + cursor_rel;
-
+        *pan_offset = (*pan_offset - cursor_rel) * effective_factor + cursor_rel;
         *has_initialised_zoom = true;
         texture_cache.clear();
         return true;

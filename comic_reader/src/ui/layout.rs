@@ -1,4 +1,3 @@
-
 //! UI layout: top bar, bottom bar, and central image area.
 
 use crate::prelude::*;
@@ -72,7 +71,7 @@ pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     });
 }
 
-pub fn goto_page_module(app: &mut CBZViewerApp, ui: &mut Ui) { 
+pub fn goto_page_module(app: &mut CBZViewerApp, ui: &mut Ui) {
     let char_width = ui.fonts(|f| {
         let font_id = FontId::monospace(ui.style().text_styles[&TextStyle::Monospace].size);
         f.glyph_width(&font_id, '0')
@@ -86,13 +85,12 @@ pub fn goto_page_module(app: &mut CBZViewerApp, ui: &mut Ui) {
             .font(TextStyle::Monospace),
     );
     app.page_goto_box.retain(|c| c.is_ascii_digit());
-    app.on_goto_page = ui.button("Jump")
+    app.on_goto_page = ui
+        .button("Jump")
         .on_hover_text("Jump to page number")
         .clicked()
         || (response.has_focus() && ui.ctx().input(|i| i.key_pressed(egui::Key::Enter)));
 }
-
-
 
 /// Draw the bottom bar (zoom, navigation, page info).
 pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
@@ -155,20 +153,12 @@ pub fn draw_central_image_area(
     egui::CentralPanel::default().show(ctx, |ui| {
         let image_area = ui.available_rect_before_wrap();
 
-        // Allocate rect without panning (no Sense::drag)
-        let response = ui.allocate_rect(image_area, egui::Sense::hover());
-        response_opt = Some(response);
-
         let response = ui.allocate_rect(image_area, egui::Sense::click_and_drag());
-        handle_pan(
-            &mut app.pan_offset,
-            &mut app.drag_start,
-            &mut app.original_pan_offset,
-            &response,
-        );
+        response_opt = Some(response.clone());
 
-        // Display images or spinner depending on mode and loaded pages
-        if app.double_page_mode {
+        // Load images from image_lru with a short lock scope
+        let (loaded1, loaded2, single_loaded) = {
+            let mut image_lru = app.image_lru.lock().unwrap();
             let page1 = app.current_page;
             let page2 = if page1 + 1 < total_pages {
                 page1 + 1
@@ -176,70 +166,96 @@ pub fn draw_central_image_area(
                 usize::MAX
             };
 
-            let loaded1 = app.image_lru.lock().unwrap().get(&page1).cloned();
-            let loaded2 = if page2 != usize::MAX {
-                app.image_lru.lock().unwrap().get(&page2).cloned()
-            } else {
-                None
-            };
+            (
+                image_lru.get(&page1).cloned(),
+                if page2 != usize::MAX {
+                    image_lru.get(&page2).cloned()
+                } else {
+                    None
+                },
+                image_lru.get(&page1).cloned(),
+            )
+            // lock dropped here
+        };
 
-            if let (Some(loaded1), Some(loaded2)) = (&loaded1, &loaded2) {
+        // Determine total size for clamping pan
+        let total_size = if app.double_page_mode {
+            if let (Some(ref l1), Some(ref l2)) = (&loaded1, &loaded2) {
+                let (w1, h1) = l1.image.dimensions();
+                let (w2, h2) = l2.image.dimensions();
+                (w1 + w2, h1.max(h2))
+            } else if let Some(ref l1) = loaded1 {
+                l1.image.dimensions()
+            } else {
+                (0, 0)
+            }
+        } else {
+            if let Some(ref l) = single_loaded {
+                l.image.dimensions()
+            } else {
+                (0, 0)
+            }
+        };
+
+        // Handle pan with a closure for clamping
+        // Call handle_pan without closure
+        handle_pan(
+            &mut app.pan_offset,
+            &mut app.drag_start,
+            &mut app.original_pan_offset,
+            &response,
+        );
+
+        // Clamp pan after dragging ends
+        if response.drag_released() {
+            clamp_pan(app, total_size, image_area);
+        }
+
+        // Drawing happens after image_lru lock is dropped and pan handled
+        if app.double_page_mode {
+            if let (Some(ref l1), Some(ref l2)) = (&loaded1, &loaded2) {
                 if !app.has_initialised_zoom {
-                    app.reset_zoom(image_area, loaded1);
+                    app.reset_zoom(image_area, l1);
                 }
-                let left_first = !app.right_to_left;
                 draw_dual_page(
                     ui,
-                    loaded1,
-                    Some(loaded2),
+                    l1,
+                    Some(l2),
                     image_area,
                     app.zoom,
                     PAGE_MARGIN_SIZE as f32,
-                    left_first,
+                    !app.right_to_left,
                     app.pan_offset,
                     &mut app.texture_cache,
                 );
-                let (w1, h1) = loaded1.image.dimensions();
-                let (w2, h2) = loaded2.image.dimensions();
-                let total_width = w1 + w2;
-                let max_height = h1.max(h2);
-                clamp_pan(app, (total_width, max_height), image_area);
-            } else if let Some(loaded1) = &loaded1 {
+            } else if let Some(ref l1) = loaded1 {
                 if !app.has_initialised_zoom {
-                    app.reset_zoom(image_area, loaded1);
+                    app.reset_zoom(image_area, l1);
                 }
                 draw_single_page(
                     ui,
-                    loaded1,
+                    l1,
                     image_area,
                     app.zoom,
                     app.pan_offset,
                     &mut app.texture_cache,
                 );
-                clamp_pan(app, loaded1.image.dimensions(), image_area);
             } else {
                 draw_spinner(ui, image_area);
             }
         } else {
-            let loaded = app
-                .image_lru
-                .lock()
-                .unwrap()
-                .get(&app.current_page)
-                .cloned();
-            if let Some(loaded) = loaded {
+            if let Some(ref loaded) = single_loaded {
                 if !app.has_initialised_zoom {
-                    app.reset_zoom(image_area, &loaded);
+                    app.reset_zoom(image_area, loaded);
                 }
                 draw_single_page(
                     ui,
-                    &loaded,
+                    loaded,
                     image_area,
                     app.zoom,
                     app.pan_offset,
                     &mut app.texture_cache,
                 );
-                clamp_pan(app, loaded.image.dimensions(), image_area);
             } else {
                 draw_spinner(ui, image_area);
             }

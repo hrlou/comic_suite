@@ -1072,6 +1072,7 @@ version = "0.1.4"
 dependencies = [
  "base64ct",
  "eframe",
+ "egui",
  "egui_extras",
  "embed-resource",
  "env_logger",

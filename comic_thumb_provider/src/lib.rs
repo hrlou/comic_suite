@@ -1,13 +1,9 @@
 #![windows_subsystem = "windows"]
 
-use std::{
-    cell::Cell,
-    ffi::c_void,
-    ptr::null_mut,
-};
+use std::{cell::Cell, ffi::c_void, ptr::null_mut};
 
 use windows::{
-    core::{GUID, HRESULT, Interface, Result, ComInterface, Type},
+    core::{ComInterface, Interface, Result, Type, GUID, HRESULT},
     Win32::{
         Foundation::{E_NOINTERFACE, S_OK},
         Graphics::Gdi::{
@@ -49,7 +45,10 @@ unsafe extern "system" fn query_interface(
 
         *ppv = null_mut();
 
-        if *riid == IThumbnailProvider::IID || *riid == IInitializeWithStream::IID || *riid == windows::core::IUnknown::IID {
+        if *riid == IThumbnailProvider::IID
+            || *riid == IInitializeWithStream::IID
+            || *riid == windows::core::IUnknown::IID
+        {
             *ppv = this as *mut c_void;
             add_ref(this);
             S_OK
@@ -132,20 +131,13 @@ unsafe extern "system" fn get_thumbnail(
 
 #[repr(C)]
 pub struct ThumbnailProviderVTable {
-    pub query_interface: unsafe extern "system" fn(
-        *mut c_void,
-        *const GUID,
-        *mut *mut c_void,
-    ) -> HRESULT,
+    pub query_interface:
+        unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
     pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
     pub release: unsafe extern "system" fn(*mut c_void) -> u32,
     pub initialize: unsafe extern "system" fn(*mut c_void, *mut c_void) -> HRESULT,
-    pub get_thumbnail: unsafe extern "system" fn(
-        *mut c_void,
-        u32,
-        *mut HBITMAP,
-        *mut WTS_ALPHATYPE,
-    ) -> HRESULT,
+    pub get_thumbnail:
+        unsafe extern "system" fn(*mut c_void, u32, *mut HBITMAP, *mut WTS_ALPHATYPE) -> HRESULT,
 }
 
 static VTABLE: ThumbnailProviderVTable = ThumbnailProviderVTable {
