@@ -1,0 +1,16 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\.cbz]
+"PerceivedType"="document"
+
+[HKEY_CLASSES_ROOT\.cbz\shellex]
+
+[HKEY_CLASSES_ROOT\.cbz\shellex\{e357fccd-a995-4576-b01f-234630154e96}]
+@="{YOUR-CLSID-GUID-HERE}"
+
+[HKEY_CLASSES_ROOT\CLSID\{YOUR-CLSID-GUID-HERE}]
+@="Comic CBZ Thumbnail Provider"
+
+[HKEY_CLASSES_ROOT\CLSID\{YOUR-CLSID-GUID-HERE}\InprocServer32]
+@="C:\\Path\\To\\comic_thumb_provider.dll"
+"ThreadingModel"="Apartment"
