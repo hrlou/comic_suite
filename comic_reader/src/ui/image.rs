@@ -322,22 +322,28 @@ pub fn draw_gif_at_rect(
     }
 }
 
-/// Gently clamp the pan offset to keep the image inside the viewing area.
-/// This acts like a soft spring rather than a hard limit.
-pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
-    let (w, h) = image_dims;
-    let avail = area.size();
+pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), viewport_rect: egui::Rect) {
+    let (img_w, img_h) = image_dims;
+    let viewport_size = viewport_rect.size();
 
-    // Max scrollable distance from center in each direction
-    let max_x = ((w as f32 * app.zoom - avail.x) / 2.0).max(0.0);
-    let max_y = ((h as f32 * app.zoom - avail.y) / 2.0).max(0.0);
+    let scaled_w = img_w as f32 * app.zoom;
+    let scaled_h = img_h as f32 * app.zoom;
 
-    // Spring stiffness factor: 0 = no correction, 1 = instant clamp
+    // Half-size margin around the image
+    let margin_x = scaled_w * 0.5;
+    let margin_y = scaled_h * 0.5;
+
+    // Calculate max pan with margin included
+    let max_pan_x = ((scaled_w - viewport_size.x) / 2.0 + margin_x).max(0.0);
+    let max_pan_y = ((scaled_h - viewport_size.y) / 2.0 + margin_y).max(0.0);
+
+    // Smooth spring-back factor
     let k = 0.2;
 
-    let target_x = app.pan_offset.x.clamp(-max_x, max_x);
-    let target_y = app.pan_offset.y.clamp(-max_y, max_y);
+    let target_x = app.pan_offset.x.clamp(-max_pan_x, max_pan_x);
+    let target_y = app.pan_offset.y.clamp(-max_pan_y, max_pan_y);
 
+    // Move pan offset gently towards the clamped target
     app.pan_offset.x += (target_x - app.pan_offset.x) * k;
     app.pan_offset.y += (target_y - app.pan_offset.y) * k;
 }
@@ -347,28 +353,28 @@ pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), area: Rect) {
 pub fn handle_pan(
     pan_offset: &mut Vec2,
     drag_start: &mut Option<egui::Pos2>,
+    original_offset: &mut Vec2,
     response: &egui::Response,
-    texture_cache: &mut TextureCache,
 ) {
     if response.drag_started() {
         *drag_start = response.interact_pointer_pos();
+        *original_offset = *pan_offset;
     }
 
     if response.dragged() {
-        if let Some(pos) = response.interact_pointer_pos() {
-            if let Some(start) = *drag_start {
-                let delta = pos - start;
-                *pan_offset += delta;
-                *drag_start = Some(pos);
-                texture_cache.clear(); // Force redraw due to view change
+        if let Some(start_pos) = *drag_start {
+            if let Some(current_pos) = response.interact_pointer_pos() {
+                let delta = current_pos - start_pos;
+                *pan_offset = *original_offset + Vec2::new(delta.x, delta.y);
             }
         }
     }
 
-    if response.drag_stopped() {
+    if response.drag_released() {
         *drag_start = None;
     }
 }
+
 
 /// Handle zooming centered at the cursor position.
 ///

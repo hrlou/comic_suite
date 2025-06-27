@@ -1,3 +1,4 @@
+
 //! UI layout: top bar, bottom bar, and central image area.
 
 use crate::prelude::*;
@@ -163,8 +164,8 @@ pub fn draw_central_image_area(
         handle_pan(
             &mut app.pan_offset,
             &mut app.drag_start,
+            &mut app.original_pan_offset,
             &response,
-            &mut app.texture_cache,
         );
 
         // Display images or spinner depending on mode and loaded pages

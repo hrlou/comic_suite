@@ -15,6 +15,7 @@ pub struct CBZViewerApp {
     pub ui_logger: UiLogger,
     pub zoom: f32,
     pub pan_offset: Vec2,
+    pub original_pan_offset: Vec2,
     pub drag_start: Option<egui::Pos2>,
     pub double_page_mode: bool,
     pub right_to_left: bool,
@@ -37,6 +38,7 @@ impl Default for CBZViewerApp {
             ui_logger: UiLogger::new(),
             zoom: 1.0,
             pan_offset: Vec2::ZERO,
+            original_pan_offset: Vec2::ZERO,
             drag_start: None,
             double_page_mode: DEFAULT_DUAL_PAGE_MODE,
             right_to_left: DEFAULT_RIGHT_TO_LEFT,
@@ -226,7 +228,7 @@ impl eframe::App for CBZViewerApp {
                     (image_size.y / self.zoom) as u32,
                 );
 
-                clamp_pan(self, image_dims_approx, response.rect);
+                // clamp_pan(self, image_dims_approx, response.rect);
             }
 
             // Preload images for current view and next pages
@@ -290,6 +292,7 @@ impl eframe::App for CBZViewerApp {
         // Draw the top and bottom bars
         draw_top_bar(self, ctx, total_pages);
         draw_bottom_bar(self, ctx, total_pages);
+
 
         self.ui_logger.clear_expired();
     }
