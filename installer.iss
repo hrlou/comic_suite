@@ -1,6 +1,6 @@
 [Setup]
 AppName=ComicReader
-AppVersion=0.1.3
+AppVersion=0.1.4
 DefaultDirName={pf}\ComicReader
 DefaultGroupName=ComicReader
 OutputDir=dist
