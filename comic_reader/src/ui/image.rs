@@ -376,28 +376,25 @@ pub fn handle_zoom(
     texture_cache: &mut TextureCache,
     has_initialised_zoom: &mut bool,
 ) -> bool {
-    let zoom_speed = 1.1;
-    let old_zoom = *zoom;
-
-    if scroll_delta_y > 0.0 {
-        *zoom = (*zoom * zoom_speed).min(max_zoom);
-    } else if scroll_delta_y < 0.0 {
-        *zoom = (*zoom / zoom_speed).max(min_zoom);
+    if scroll_delta_y.abs() < f32::EPSILON {
+        return false;
     }
 
+    let old_zoom = *zoom;
+    let zoom_sensitivity = 0.1;
+
+    // Continuous zooming using scroll delta
+    let zoom_factor = (1.0 + zoom_sensitivity * scroll_delta_y).clamp(0.5, 2.0);
+    *zoom = (*zoom * zoom_factor).clamp(min_zoom, max_zoom);
+
     if (*zoom - old_zoom).abs() > f32::EPSILON {
-        // Convert cursor pos from screen space to image local coords relative to center
         let cursor_rel = egui::vec2(
             cursor_pos.x - area_rect.center().x,
             cursor_pos.y - area_rect.center().y,
         );
+        let effective_factor = *zoom / old_zoom;
 
-        // Calculate zoom factor change
-        let zoom_factor = *zoom / old_zoom;
-
-        // Adjust pan so zoom centers on cursor position
-        *pan_offset = (*pan_offset - cursor_rel) * zoom_factor + cursor_rel;
-
+        *pan_offset = (*pan_offset - cursor_rel) * effective_factor + cursor_rel;
         *has_initialised_zoom = true;
         texture_cache.clear();
         return true;

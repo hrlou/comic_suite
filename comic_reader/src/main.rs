@@ -42,7 +42,7 @@ fn main() {
     };
 
     let _ = eframe::run_native(
-        "CBZ Viewer",
+        NAME,
         native_options,
         Box::new(move |cc| {
             // Pass CreationContext to CBZViewerApp::new

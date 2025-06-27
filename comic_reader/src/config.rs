@@ -1,5 +1,7 @@
 //! Application-wide configuration constants.
 
+pub const NAME: &str = "Comic Reader";
+
 /// Default window width.
 pub const WIN_WIDTH: f32 = 720.0;
 /// Default window height.

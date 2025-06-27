@@ -179,7 +179,7 @@ impl CBZViewerApp {
 }
 
 impl eframe::App for CBZViewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let mut total_pages = 0;
 
         // Check if file is dragged and dropped
