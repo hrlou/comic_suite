@@ -160,7 +160,11 @@ pub fn draw_central_image_area(
         let (loaded1, loaded2, single_loaded) = {
             let mut image_lru = app.image_lru.lock().unwrap();
             let page1 = app.current_page;
-            let page2 = if page1 + 1 < total_pages { page1 + 1 } else { usize::MAX };
+            let page2 = if page1 + 1 < total_pages {
+                page1 + 1
+            } else {
+                usize::MAX
+            };
 
             (
                 image_lru.get(&page1).cloned(),
