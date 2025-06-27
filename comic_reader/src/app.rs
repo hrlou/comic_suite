@@ -21,7 +21,8 @@ pub struct CBZViewerApp {
     pub right_to_left: bool,
     pub has_initialised_zoom: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
-    pub on_goto_page: (bool, usize),
+    pub page_goto_box: String,
+    pub on_goto_page: bool,
     pub on_open_comic: bool,
     pub on_open_folder: bool,
 }
@@ -44,7 +45,8 @@ impl Default for CBZViewerApp {
             right_to_left: DEFAULT_RIGHT_TO_LEFT,
             has_initialised_zoom: false,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
-            on_goto_page: (false, 0),
+            page_goto_box: "1".to_string(),
+            on_goto_page: false,
             on_open_comic: false,
             on_open_folder: false,
         }
@@ -217,18 +219,6 @@ impl eframe::App for CBZViewerApp {
                     &mut self.texture_cache, // pass cursor_pos here
                     &mut self.has_initialised_zoom,
                 );
-
-                if zoomed {
-                    // adjust pan offset here based on cursor_pos and zoom change
-                }
-
-                let image_size = response.rect.size();
-                let image_dims_approx = (
-                    (image_size.x / self.zoom) as u32,
-                    (image_size.y / self.zoom) as u32,
-                );
-
-                // clamp_pan(self, image_dims_approx, response.rect);
             }
 
             // Preload images for current view and next pages
@@ -247,10 +237,7 @@ impl eframe::App for CBZViewerApp {
                     self.image_lru.clone(),
                     self.loading_pages.clone(),
                 );
-            }
-
-            // --- Zoom with mouse wheel ---
-            let input = ctx.input(|i| i.clone());
+            } 
 
             // Keyboard navigation
             if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
@@ -260,15 +247,16 @@ impl eframe::App for CBZViewerApp {
                 self.goto_prev_page();
             }
 
-            if self.on_goto_page.0 {
-                self.on_goto_page.0 = false;
-                if self.goto_page(self.on_goto_page.1) {
+            if self.on_goto_page {
+                self.on_goto_page = false;
+                let page: usize = self.page_goto_box.parse().unwrap_or(0);
+                if self.goto_page(page - 1) {
                     self.ui_logger
-                        .info(format!("Navigated to page {}", self.on_goto_page.1));
+                        .info(format!("Navigated to page {}", page));
                 } else {
                     self.ui_logger.warn(format!(
                         "Failed to navigate to page {}",
-                        self.on_goto_page.1
+                        page
                     ));
                 }
             }

@@ -72,6 +72,28 @@ pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     });
 }
 
+pub fn goto_page_module(app: &mut CBZViewerApp, ui: &mut Ui) { 
+    let char_width = ui.fonts(|f| {
+        let font_id = FontId::monospace(ui.style().text_styles[&TextStyle::Monospace].size);
+        f.glyph_width(&font_id, '0')
+    });
+    let desired_width = char_width * 5.0 + 10.0;
+
+    let response = ui.add_sized(
+        [desired_width, ui.spacing().interact_size.y],
+        TextEdit::singleline(&mut app.page_goto_box)
+            .hint_text("###")
+            .font(TextStyle::Monospace),
+    );
+    app.page_goto_box.retain(|c| c.is_ascii_digit());
+    app.on_goto_page = ui.button("Jump")
+        .on_hover_text("Jump to page number")
+        .clicked()
+        || (response.has_focus() && ui.ctx().input(|i| i.key_pressed(egui::Key::Enter)));
+}
+
+
+
 /// Draw the bottom bar (zoom, navigation, page info).
 pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
@@ -84,30 +106,7 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize
                 app.texture_cache.clear();
             }
             ui.separator();
-
-            let char_width = ui.fonts(|f| {
-                let font_id = FontId::monospace(ui.style().text_styles[&TextStyle::Monospace].size);
-                f.glyph_width(&font_id, '0')
-            });
-            let desired_width = char_width * 4.0 + 10.0; // +10 for padding
-            let mut input_string = app.on_goto_page.1.to_string();
-            ui.add_sized(
-                [desired_width, ui.spacing().interact_size.y],
-                TextEdit::singleline(&mut input_string)
-                    .hint_text("Go to a page")
-                    .font(TextStyle::Monospace),
-            );
-            input_string.retain(|c| c.is_ascii_digit());
-            app.on_goto_page = (
-                false,
-                input_string
-                    .parse::<usize>()
-                    .unwrap_or("0".parse().unwrap_or(0)),
-            );
-            if ui.button("Goto").clicked() {
-                app.on_goto_page.0 = true;
-            }
-
+            goto_page_module(app, ui);
             ui.separator();
 
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
