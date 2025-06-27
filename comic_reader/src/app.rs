@@ -281,7 +281,6 @@ impl eframe::App for CBZViewerApp {
         draw_top_bar(self, ctx, total_pages);
         draw_bottom_bar(self, ctx, total_pages);
 
-
         self.ui_logger.clear_expired();
     }
 }
