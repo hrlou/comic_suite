@@ -237,7 +237,7 @@ impl eframe::App for CBZViewerApp {
                     self.image_lru.clone(),
                     self.loading_pages.clone(),
                 );
-            } 
+            }
 
             // Keyboard navigation
             if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
@@ -251,13 +251,10 @@ impl eframe::App for CBZViewerApp {
                 self.on_goto_page = false;
                 let page: usize = self.page_goto_box.parse().unwrap_or(0);
                 if self.goto_page(page - 1) {
-                    self.ui_logger
-                        .info(format!("Navigated to page {}", page));
+                    self.ui_logger.info(format!("Navigated to page {}", page));
                 } else {
-                    self.ui_logger.warn(format!(
-                        "Failed to navigate to page {}",
-                        page
-                    ));
+                    self.ui_logger
+                        .warn(format!("Failed to navigate to page {}", page));
                 }
             }
         } else {
@@ -280,7 +277,6 @@ impl eframe::App for CBZViewerApp {
         // Draw the top and bottom bars
         draw_top_bar(self, ctx, total_pages);
         draw_bottom_bar(self, ctx, total_pages);
-
 
         self.ui_logger.clear_expired();
     }

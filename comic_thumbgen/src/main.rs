@@ -78,7 +78,10 @@ fn thumbnail_worker(path: PathBuf) {
                 return;
             }
             Err(e) => {
-                eprintln!("Attempt {}: Failed to generate thumbnail for {:?}: {}", attempt, path, e);
+                eprintln!(
+                    "Attempt {}: Failed to generate thumbnail for {:?}: {}",
+                    attempt, path, e
+                );
                 if attempt == MAX_RETRIES {
                     eprintln!("Giving up on {:?}", path);
                     return;
@@ -265,7 +268,8 @@ fn run_service_no_service_handler() -> Result<(), anyhow::Error> {
     eprintln!("Press Ctrl+C to stop...");
     ctrlc::set_handler(move || {
         let _ = stop_tx.send(());
-    }).expect("Error setting Ctrl+C handler");
+    })
+    .expect("Error setting Ctrl+C handler");
 
     watcher_thread.join().unwrap();
     Ok(())
