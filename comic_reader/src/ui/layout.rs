@@ -18,14 +18,18 @@ pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
 pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            modules::ui_zoom_slider(app, ui);
-            ui.separator();
-            modules::ui_goto_page(app, ui);
-            ui.separator();
-            ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                modules::ui_page_nav(app, ui, total_pages);
+            if app.archive_path.is_some() {
+                modules::ui_zoom_slider(app, ui);
+                ui.separator();
+                modules::ui_goto_page(app, ui);
+                ui.separator();
+                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    modules::ui_page_nav(app, ui, total_pages);
+                    modules::ui_log_msg(app, ui);
+                });
+            } else {
                 modules::ui_log_msg(app, ui);
-            });
+            }
         });
     });
 }
