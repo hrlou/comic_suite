@@ -31,6 +31,7 @@ impl ZipImageArchive {
                 }
             }
         }
+        images.sort();
         images
     }
 
