@@ -355,7 +355,6 @@ pub fn handle_pan(
     if response.drag_stopped() {
         *drag_start = None;
     }
-
 }
 
 /// Handle zooming centered at the cursor position.

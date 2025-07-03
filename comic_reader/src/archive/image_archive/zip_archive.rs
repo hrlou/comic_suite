@@ -1,9 +1,9 @@
 use crate::prelude::*;
 
-
 /// Wrapper for zip files, providing access to image files.
 pub struct ZipImageArchive {
     pub path: PathBuf,
+    pub manifest: Manifest,
     // Optionally: pub zip: ZipArchive<File>,
 }
 

@@ -1,6 +1,5 @@
 //! Main application state and logic.
 
-
 use crate::prelude::*;
 
 /// The main application struct, holding all state.
@@ -179,7 +178,6 @@ impl CBZViewerApp {
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-
         // frame.storage_mut()
         let mut total_pages = 0;
 

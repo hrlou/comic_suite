@@ -9,7 +9,7 @@ If you want to have thumbnails in Windows file explorer, use CBXShell in the res
 Comic book web file.
 
 ```
-webcomic.cbw
+webcomic.web.cbz
 ├── manifest.toml   # TOML manifest
 └── thumb.jpg    	# optional: thumbnail
 ```
@@ -18,11 +18,12 @@ Manifest:
 # Example CBW (Comic Book Web) Manifest
 # Reference a comic from the internet
 
-[meta]
+[metadata]
 title = "Foxes"
 author = "Google Images"
+web_archive = true
 
-[pages]
+[external_pages]
 urls = [
 	"https://upload.wikimedia.org/wikipedia/commons/3/30/Vulpes_vulpes_ssp_fulvus.jpg",
 	"https://i.natgeofe.com/k/6496b566-0510-4e92-84e8-7a0cf04aa505/red-fox-portrait_3x4.jpg",

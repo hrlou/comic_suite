@@ -1,30 +1,14 @@
-use serde::Deserialize;
-
-// #[derive(Debug, Deserialize)]
-// pub struct Meta {
-//     pub title: String,
-//     pub author: String,
-// }
-
-#[derive(Debug, Deserialize)]
-pub struct Pages {
-    pub urls: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Manifest {
-    // pub meta: Meta,
-    pub pages: Pages,
-}
+use crate::prelude::*;
 
 // Wrapper for CBWs
 pub struct WebImageArchive {
-    pub images: Vec<String>,
+    pub manifest: Manifest,
 }
 
 impl WebImageArchive {
     pub fn list_images(&self) -> Vec<String> {
-        self.images.clone()
+        // self.images.clone()
+        todo!()
     }
 
     pub fn read_image(&mut self, filename: &str) -> Result<Vec<u8>, crate::error::AppError> {
@@ -34,7 +18,7 @@ impl WebImageArchive {
         })?;
 
         if !resp.status().is_success() {
-            return Err(crate::error::AppError::NetworkError(format!(
+            return Err(AppError::NetworkError(format!(
                 "HTTP error {} for {}",
                 resp.status(),
                 filename
@@ -42,10 +26,7 @@ impl WebImageArchive {
         }
 
         let bytes = resp.bytes().map_err(|e| {
-            crate::error::AppError::NetworkError(format!(
-                "Failed to read bytes from {}: {}",
-                filename, e
-            ))
+            AppError::NetworkError(format!("Failed to read bytes from {}: {}", filename, e))
         })?;
 
         Ok(bytes.to_vec())
