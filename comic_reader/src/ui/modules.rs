@@ -1,4 +1,4 @@
-use crate::{app, prelude::*};
+use crate::prelude::*;
 
 pub fn ui_goto_page(app: &mut CBZViewerApp, ui: &mut Ui) {
     let char_width = ui.fonts(|f| {

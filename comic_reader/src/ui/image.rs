@@ -250,8 +250,8 @@ pub fn draw_gif_at_rect(
     ui: &mut Ui,
     loaded: &LoadedPage,
     rect: Rect,
-    zoom: f32,
-    pan: Vec2,
+    _zoom: f32,
+    _pan: Vec2,
     cache: &mut TextureCache,
 ) {
     if let PageImage::AnimatedGif {
@@ -351,9 +351,11 @@ pub fn handle_pan(
         }
     }
 
-    if response.drag_released() {
+    // if response.drag_released() {
+    if response.drag_stopped() {
         *drag_start = None;
     }
+
 }
 
 /// Handle zooming centered at the cursor position.

@@ -17,12 +17,12 @@ pub enum AppError {
     ManifestError(String),
     #[error("No images found in archive")]
     NoImages,
-    #[error("Image not found: {0}")]
-    ImageNotFound(String),
+    // #[error("Image not found: {0}")]
+    // ImageNotFound(String),
     #[error("Unsupported archive type or not found")]
     UnsupportedArchive,
     #[error("Network error: {0}")]
     NetworkError(String),
-    #[error("Other error: {0}")]
-    Other(String),
+    // #[error("Other error: {0}")]
+    // Other(String),
 }

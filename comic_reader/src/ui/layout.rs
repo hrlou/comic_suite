@@ -15,7 +15,7 @@ pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
 }
 
 /// Draw the bottom bar (zoom, navigation, page info).
-pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context) {
+pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
             modules::ui_zoom_slider(app, ui);
@@ -23,6 +23,7 @@ pub fn draw_bottom_bar(app: &mut CBZViewerApp, ctx: &Context) {
             modules::ui_goto_page(app, ui);
             ui.separator();
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                modules::ui_page_nav(app, ui, total_pages);
                 modules::ui_log_msg(app, ui);
             });
         });
@@ -95,7 +96,7 @@ pub fn draw_central_image_area(
         );
 
         // Clamp pan after dragging ends
-        if response.drag_released() {
+        if response.drag_stopped() {
             clamp_pan(app, total_size, image_area);
         }
 

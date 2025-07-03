@@ -1,6 +1,5 @@
 //! Main application state and logic.
 
-use eframe::egui::gui_zoom::kb_shortcuts;
 
 use crate::prelude::*;
 
@@ -179,7 +178,9 @@ impl CBZViewerApp {
 }
 
 impl eframe::App for CBZViewerApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+
+        // frame.storage_mut()
         let mut total_pages = 0;
 
         // Check if file is dragged and dropped
@@ -203,7 +204,7 @@ impl eframe::App for CBZViewerApp {
 
             // Check if mouse is over the zoom area and there is a scroll
             if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                let zoomed = handle_zoom(
+                let _zoomed = handle_zoom(
                     &mut self.zoom,
                     &mut self.pan_offset,
                     cursor_pos,
@@ -271,7 +272,7 @@ impl eframe::App for CBZViewerApp {
 
         // Draw the top and bottom bars
         draw_top_bar(self, ctx, total_pages);
-        draw_bottom_bar(self, ctx);
+        draw_bottom_bar(self, ctx, total_pages);
 
         self.ui_logger.clear_expired();
     }
