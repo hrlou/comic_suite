@@ -22,6 +22,7 @@ pub struct CBZViewerApp {
     pub page_goto_box: String,
     pub show_manifest_editor: bool,
     pub on_goto_page: bool,
+    pub on_new_comic: bool,
     pub on_open_comic: bool,
     pub on_open_folder: bool,
 }
@@ -47,6 +48,7 @@ impl Default for CBZViewerApp {
             page_goto_box: "1".to_string(),
             show_manifest_editor: false,
             on_goto_page: false,
+            on_new_comic: false,
             on_open_comic: false,
             on_open_folder: false,
         }
@@ -59,7 +61,7 @@ impl CBZViewerApp {
         crate::ui::setup_fonts(&cc.egui_ctx);
         let mut app = Self::default();
         if let Some(path) = path {
-            let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
+            /*let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
             if let Ok(guard) = archive.lock() {
                 let filenames = guard.list_images();
                 if filenames.is_empty() {
@@ -68,7 +70,8 @@ impl CBZViewerApp {
                 app.filenames = Some(filenames);
             }
             app.archive_path = Some(path);
-            app.archive = Some(Arc::clone(&archive));
+            app.archive = Some(Arc::clone(&archive));*/
+            let _ = app.load_new_file(path);
         }
         Ok(app)
     }
@@ -139,9 +142,9 @@ impl CBZViewerApp {
         let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
         if let Ok(guard) = archive.lock() {
             let filenames = guard.list_images();
-            if filenames.is_empty() {
-                return Err(AppError::NoImages);
-            }
+            // if filenames.is_empty() {
+                // return Err(AppError::NoImages);
+            // }
             app.filenames = Some(filenames);
         }
         app.archive_path = Some(path);
@@ -158,6 +161,18 @@ impl CBZViewerApp {
     }
 
     pub fn handle_file_options(&mut self) {
+        if self.on_new_comic {
+            self.on_new_comic = false;
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Comic Book Archive", &["cbz", "zip"])
+                .set_file_name("Comic.cbz")
+                .save_file()
+            {
+                let _ = crate::utils::create_cbz_with_manifest(&path);
+                let _ = self.load_new_file(path);
+                return; // Prevent further update with old state
+            }
+        } 
         if self.on_open_comic {
             self.on_open_comic = false;
             if let Some(path) = rfd::FileDialog::new()
@@ -199,58 +214,60 @@ impl eframe::App for CBZViewerApp {
 
             let filenames = self.filenames.clone().unwrap_or_default();
             total_pages = filenames.len();
+            
+            if total_pages > 0 {
+                let response = draw_central_image_area(self, ctx, total_pages);
 
-            let response = draw_central_image_area(self, ctx, total_pages);
-
-            // Check if mouse is over the zoom area and there is a scroll
-            if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                let _zoomed = handle_zoom(
-                    &mut self.zoom,
-                    &mut self.pan_offset,
-                    cursor_pos,
-                    response.rect,
-                    ctx.input(|i| i.raw_scroll_delta.y),
-                    0.05,
-                    10.0,
-                    &mut self.texture_cache, // pass cursor_pos here
-                    &mut self.has_initialised_zoom,
-                );
-            }
-
-            // Preload images for current view and next pages
-            let mut pages_to_preload = vec![self.current_page];
-            for offset in 1..=READ_AHEAD {
-                let next = self.current_page + offset;
-                if next < total_pages {
-                    pages_to_preload.push(next);
+                // Check if mouse is over the zoom area and there is a scroll
+                if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                    let _zoomed = handle_zoom(
+                        &mut self.zoom,
+                        &mut self.pan_offset,
+                        cursor_pos,
+                        response.rect,
+                        ctx.input(|i| i.raw_scroll_delta.y),
+                        0.05,
+                        10.0,
+                        &mut self.texture_cache, // pass cursor_pos here
+                        &mut self.has_initialised_zoom,
+                    );
                 }
-            }
-            for &page in &pages_to_preload {
-                let _ = load_image_async(
-                    page,
-                    filenames.clone(),
-                    archive.clone(),
-                    self.image_lru.clone(),
-                    self.loading_pages.clone(),
-                );
-            }
 
-            // Keyboard navigation
-            if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
-                self.goto_next_page();
-            }
-            if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
-                self.goto_prev_page();
-            }
+                // Preload images for current view and next pages
+                let mut pages_to_preload = vec![self.current_page];
+                for offset in 1..=READ_AHEAD {
+                    let next = self.current_page + offset;
+                    if next < total_pages {
+                        pages_to_preload.push(next);
+                    }
+                }
+                for &page in &pages_to_preload {
+                    let _ = load_image_async(
+                        page,
+                        filenames.clone(),
+                        archive.clone(),
+                        self.image_lru.clone(),
+                        self.loading_pages.clone(),
+                    );
+                }
 
-            if self.on_goto_page {
-                self.on_goto_page = false;
-                let page: usize = self.page_goto_box.parse().unwrap_or(0);
-                if self.goto_page(page - 1) {
-                    self.ui_logger.info(format!("Navigated to page {}", page));
-                } else {
-                    self.ui_logger
-                        .warn(format!("Failed to navigate to page {}", page));
+                // Keyboard navigation
+                if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+                    self.goto_next_page();
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+                    self.goto_prev_page();
+                }
+
+                if self.on_goto_page {
+                    self.on_goto_page = false;
+                    let page: usize = self.page_goto_box.parse().unwrap_or(0);
+                    if self.goto_page(page - 1) {
+                        self.ui_logger.info(format!("Navigated to page {}", page));
+                    } else {
+                        self.ui_logger
+                            .warn(format!("Failed to navigate to page {}", page));
+                    }
                 }
             }
         } else {
@@ -273,29 +290,34 @@ impl eframe::App for CBZViewerApp {
         // Handle Manifest
         if self.show_manifest_editor {
             if let Some(archive_mutex) = &self.archive {
-                if let Ok(archive) = archive_mutex.lock() {
-                    let manifest_opt = match &*archive {
-                        ImageArchive::Zip(zip_archive) => Some(&zip_archive.manifest),
-                        ImageArchive::Web(web_archive) => Some(&web_archive.manifest),
-                        ImageArchive::Folder(_) => {
-                            self.ui_logger.error("Cannot edit manifest of a folder");
-                            None
+                if let Ok(mut archive) = archive_mutex.lock() {
+                    match &mut *archive {
+                        ImageArchive::Zip(zip) => {
+                            Window::new("Edit Manifest")
+                                .open(&mut self.show_manifest_editor)
+                                .show(ctx, |ui| {
+                                    let mut editor = ManifestEditor::new(&mut zip.manifest);
+                                    let editor = editor.ui(&zip.path, ui, ctx);
+                                    if editor.is_err() {
+                                        self.ui_logger.error("Cannot edit Manifest");
+                                    }
+                                });
                         }
-                    };
-
-                    if let Some(manifest) = manifest_opt {
-                        // Clone the manifest to edit
-                        let mut manifest = manifest.clone();
-                        let mut editor = ManifestEditor::new(&mut manifest);
-
-                        // Show the UI for editing
-                        Window::new("Manifest Editor")
-                            .open(&mut self.show_manifest_editor) // closeable with X button
-                            .show(ctx, |ui| {
-                                editor.ui(ui, ctx);
-                            });
-
-                        // TODO: On save/apply, update the archive manifest inside the Mutex
+                        ImageArchive::Web(web) => {
+                            Window::new("Edit Manifest")
+                                .open(&mut self.show_manifest_editor)
+                                .show(ctx, |ui| {
+                                    let mut editor = ManifestEditor::new(&mut web.manifest);
+                                    let editor = editor.ui(&web.path, ui, ctx);
+                                    if editor.is_err() {
+                                        self.ui_logger.error("Cannot edit Manifest");
+                                    }
+                                });
+                        }
+                        ImageArchive::Folder(_) => {
+                            self.ui_logger
+                                .error("Folder manifest editing is not supported.");
+                        }
                     }
                 }
             }

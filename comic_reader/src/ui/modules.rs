@@ -64,21 +64,37 @@ pub fn ui_log_msg(app: &mut CBZViewerApp, ui: &mut Ui) {
     }
 }
 
-pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, ctx: &Context) {
-    egui::menu::bar(ui, |ui| {
-        ui.menu_button("File", |ui| {
-            if ui.button("Open Comic...").clicked() {
-                app.on_open_comic = true;
-                ui.close_menu();
+pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
+    ui.menu_button("File", |ui| {
+        if ui.button("New Comic...").clicked() {
+            app.on_new_comic = true;
+            ui.close_menu();
+        }
+        if ui.button("Open Comic...").clicked() {
+            app.on_open_comic = true;
+            ui.close_menu();
+        }
+        if ui.button("Open Folder...").clicked() {
+            app.on_open_folder = true;
+            ui.close_menu();
+        }
+        if ui.button("Reload...").clicked() {
+            if let Some(path) = app.archive_path.clone() { 
+                let _ = app.load_new_file(path);
+            } else {
+                app.ui_logger.warn("Failed to reload");
             }
-            if ui.button("Open Folder...").clicked() {
-                app.on_open_folder = true;
-                ui.close_menu();
-            }
-            if ui.button("Edit Manifest...").clicked() {
-                app.show_manifest_editor = true;
-            }
-        });
+            ui.close_menu();
+        }
+    });
+}
+
+pub fn ui_edit(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
+    ui.menu_button("Edit", |ui| {
+        if ui.button("Edit Manifest...").clicked() {
+            app.show_manifest_editor = true;
+            ui.close_menu();
+        }
     });
 }
 

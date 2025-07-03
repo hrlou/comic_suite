@@ -1,9 +1,9 @@
-use crate::prelude::*;
+use crate::{archive::manifest, prelude::*};
 
 use std::io::Write;
-use zip::ZipWriter;
+use zip::{write::FileOptions, ZipWriter};
 
-fn rebuild_zip_with_manifest(original_path: &Path, manifest: &Manifest) -> Result<(), AppError> {
+pub fn rebuild_zip_with_manifest(original_path: &Path, manifest: &Manifest) -> Result<(), AppError> {
     // Open original archive
     let original_file = File::open(original_path)?;
     let mut zip = ZipArchive::new(original_file)?;
@@ -38,6 +38,29 @@ fn rebuild_zip_with_manifest(original_path: &Path, manifest: &Manifest) -> Resul
 
     // Replace original file
     fs::rename(temp_path, original_path)?;
+
+    Ok(())
+}
+
+pub fn create_cbz_with_manifest(path: &std::path::Path) -> Result<(), AppError> {
+    let file = File::create(path)?;
+    let mut zip = ZipWriter::new(file);
+
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored) // or .Deflated
+        .unix_permissions(0o644);
+
+    let mut manifest = Manifest::default();
+    manifest.meta.web_archive = true;
+
+    let manifest_str = toml::to_string_pretty(&manifest)
+        .map_err(|e| AppError::ManifestError(format!("Couldn't serialize: {}", e)))?;
+
+
+    zip.start_file("manifest.toml", options)?;
+    zip.write_all(manifest_str.as_bytes())?;
+
+    zip.finish()?; // Closes the archive and flushes everything
 
     Ok(())
 }

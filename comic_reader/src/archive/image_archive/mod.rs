@@ -43,7 +43,10 @@ impl ImageArchive {
                             .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
 
                         if manifest.meta.web_archive {
-                            Ok(ImageArchive::Web(WebImageArchive { manifest }))
+                            Ok(ImageArchive::Web(WebImageArchive { 
+                                path: path.to_path_buf(),
+                                manifest 
+                            }))
                         } else {
                             Ok(ImageArchive::Zip(ZipImageArchive {
                                 path: path.to_path_buf(),

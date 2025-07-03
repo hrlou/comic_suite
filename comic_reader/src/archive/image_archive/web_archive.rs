@@ -2,13 +2,19 @@ use crate::prelude::*;
 
 // Wrapper for CBWs
 pub struct WebImageArchive {
+    pub path: PathBuf,
     pub manifest: Manifest,
 }
 
 impl WebImageArchive {
     pub fn list_images(&self) -> Vec<String> {
         // self.images.clone()
-        todo!()
+        // todo!()
+        if let Some(images) = self.manifest.external_pages.clone() {
+            images.urls
+        } else {
+            vec![]
+        }
     }
 
     pub fn read_image(&mut self, filename: &str) -> Result<Vec<u8>, crate::error::AppError> {
