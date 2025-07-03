@@ -11,7 +11,8 @@ pub use std::time::{Duration, Instant};
 pub use eframe::{
     egui::{
         self, CentralPanel, Color32, Context, FontData, FontDefinitions, FontFamily, FontId, Image,
-        Layout, Pos2, Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui, Vec2, ViewportCommand,
+        Layout, /*Pos2,*/ Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui, Vec2,
+        /*ViewportCommand,*/
     },
     CreationContext,
 };

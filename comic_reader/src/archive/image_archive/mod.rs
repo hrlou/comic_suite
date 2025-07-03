@@ -42,7 +42,7 @@ impl ImageArchive {
                     let mut contents = String::new();
                     manifest_file.read_to_string(&mut contents)?;
 
-                    let manifest: zip_archive::Manifest = toml::from_str(&contents)
+                    let manifest: web_archive::Manifest = toml::from_str(&contents)
                         .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
 
                     Ok(ImageArchive::Web(WebImageArchive {

@@ -1,22 +1,5 @@
 use crate::prelude::*;
-use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
-pub struct Meta {
-    pub title: String,
-    pub author: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Pages {
-    pub urls: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Manifest {
-    pub meta: Meta,
-    pub pages: Pages,
-}
 
 /// Wrapper for zip files, providing access to image files.
 pub struct ZipImageArchive {

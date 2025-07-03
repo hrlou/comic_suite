@@ -3,6 +3,8 @@
 pub mod image;
 pub mod layout;
 pub mod log;
+pub mod modules;
+
 pub use image::*;
 pub use layout::*;
 pub use log::*;

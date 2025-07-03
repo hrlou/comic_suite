@@ -144,7 +144,10 @@ pub fn draw_dual_page(
             disp_size1,
         );
         let rect_right = egui::Rect::from_min_size(
-            egui::pos2(left_start + disp_size1.x + margin, center.y - disp_size2.y * 0.5),
+            egui::pos2(
+                left_start + disp_size1.x + margin,
+                center.y - disp_size2.y * 0.5,
+            ),
             disp_size2,
         );
 

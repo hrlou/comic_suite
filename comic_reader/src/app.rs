@@ -157,7 +157,7 @@ impl CBZViewerApp {
         self.pan_offset = Vec2::ZERO;
     }
 
-    pub fn handle_menu_bar_file(&mut self) {
+    pub fn handle_open_file(&mut self) {
         if self.on_open_comic {
             self.on_open_comic = false;
             if let Some(path) = rfd::FileDialog::new()
@@ -195,12 +195,7 @@ impl eframe::App for CBZViewerApp {
 
         if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
-            // if let Some(filenames) = &self.filenames {
-            //     // Must be first; underneath all other UI elements
-            //     total_pages = filenames.len();
-            // } else {
-            //     self.ui_logger.warn("No archive available to display.");
-            // }
+
             let filenames = self.filenames.clone().unwrap_or_default();
             total_pages = filenames.len();
 
@@ -272,11 +267,11 @@ impl eframe::App for CBZViewerApp {
             });
         }
         // Menu bar
-        self.handle_menu_bar_file();
+        self.handle_open_file();
 
         // Draw the top and bottom bars
         draw_top_bar(self, ctx, total_pages);
-        draw_bottom_bar(self, ctx, total_pages);
+        draw_bottom_bar(self, ctx);
 
         self.ui_logger.clear_expired();
     }
