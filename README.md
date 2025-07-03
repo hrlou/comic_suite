@@ -18,7 +18,7 @@ Manifest:
 # Example CBW (Comic Book Web) Manifest
 # Reference a comic from the internet
 
-[metadata]
+[meta]
 title = "Foxes"
 author = "Google Images"
 web_archive = true
