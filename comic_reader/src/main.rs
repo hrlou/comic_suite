@@ -9,6 +9,7 @@ mod prelude;
 mod ui;
 // mod util;
 mod app;
+pub mod utils;
 
 use crate::prelude::*;
 

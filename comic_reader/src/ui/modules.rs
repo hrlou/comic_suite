@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{archive::manifest, prelude::*};
 
 pub fn ui_goto_page(app: &mut CBZViewerApp, ui: &mut Ui) {
     let char_width = ui.fonts(|f| {
@@ -64,7 +64,7 @@ pub fn ui_log_msg(app: &mut CBZViewerApp, ui: &mut Ui) {
     }
 }
 
-pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui) {
+pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, ctx: &Context) {
     egui::menu::bar(ui, |ui| {
         ui.menu_button("File", |ui| {
             if ui.button("Open Comic...").clicked() {
@@ -74,6 +74,9 @@ pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui) {
             if ui.button("Open Folder...").clicked() {
                 app.on_open_folder = true;
                 ui.close_menu();
+            }
+            if ui.button("Edit Manifest...").clicked() {
+                app.show_manifest_editor = true;
             }
         });
     });

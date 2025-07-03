@@ -6,7 +6,7 @@ use crate::{prelude::*, ui::modules};
 pub fn draw_top_bar(app: &mut CBZViewerApp, ctx: &Context, total_pages: usize) {
     egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            modules::ui_file(app, ui);
+            modules::ui_file(app, ui, ctx);
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                 modules::ui_navigation(app, ui, total_pages);
             });

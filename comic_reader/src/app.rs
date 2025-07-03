@@ -20,6 +20,7 @@ pub struct CBZViewerApp {
     pub has_initialised_zoom: bool,
     pub loading_pages: Arc<Mutex<HashSet<usize>>>,
     pub page_goto_box: String,
+    pub show_manifest_editor: bool,
     pub on_goto_page: bool,
     pub on_open_comic: bool,
     pub on_open_folder: bool,
@@ -44,6 +45,7 @@ impl Default for CBZViewerApp {
             has_initialised_zoom: false,
             loading_pages: Arc::new(Mutex::new(HashSet::new())),
             page_goto_box: "1".to_string(),
+            show_manifest_editor: false,
             on_goto_page: false,
             on_open_comic: false,
             on_open_folder: false,
@@ -155,7 +157,7 @@ impl CBZViewerApp {
         self.pan_offset = Vec2::ZERO;
     }
 
-    pub fn handle_open_file(&mut self) {
+    pub fn handle_file_options(&mut self) {
         if self.on_open_comic {
             self.on_open_comic = false;
             if let Some(path) = rfd::FileDialog::new()
@@ -266,7 +268,38 @@ impl eframe::App for CBZViewerApp {
             });
         }
         // Menu bar
-        self.handle_open_file();
+        self.handle_file_options();
+
+        // Handle Manifest
+        if self.show_manifest_editor {
+            if let Some(archive_mutex) = &self.archive {
+                if let Ok(archive) = archive_mutex.lock() {
+                    let manifest_opt = match &*archive {
+                        ImageArchive::Zip(zip_archive) => Some(&zip_archive.manifest),
+                        ImageArchive::Web(web_archive) => Some(&web_archive.manifest),
+                        ImageArchive::Folder(_) => {
+                            self.ui_logger.error("Cannot edit manifest of a folder");
+                            None
+                        }
+                    };
+
+                    if let Some(manifest) = manifest_opt {
+                        // Clone the manifest to edit
+                        let mut manifest = manifest.clone();
+                        let mut editor = ManifestEditor::new(&mut manifest);
+
+                        // Show the UI for editing
+                        Window::new("Manifest Editor")
+                            .open(&mut self.show_manifest_editor) // closeable with X button
+                            .show(ctx, |ui| {
+                                editor.ui(ui, ctx);
+                            });
+
+                        // TODO: On save/apply, update the archive manifest inside the Mutex
+                    }
+                }
+            }
+        }
 
         // Draw the top and bottom bars
         draw_top_bar(self, ctx, total_pages);

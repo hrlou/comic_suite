@@ -12,7 +12,7 @@ pub use eframe::{
     egui::{
         self, CentralPanel, Color32, Context, FontData, FontDefinitions, FontFamily, FontId, Image,
         Layout, /*Pos2,*/ Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui,
-        Vec2,
+        Vec2, Window,
         /*ViewportCommand,*/
     },
     CreationContext,
@@ -25,7 +25,10 @@ pub use zip::read::ZipArchive;
 // crate modules
 pub use crate::{
     app::CBZViewerApp,
-    archive::{image_archive::manifest::Manifest, ImageArchive},
+    archive::{
+        image_archive::manifest::{Manifest, ManifestEditor},
+        ImageArchive,
+    },
     cache::{
         image_cache::{LoadedPage, PageImage},
         load_image_async, new_image_cache,
