@@ -1,7 +1,9 @@
 use crate::prelude::*;
-
-use unrar::Archive;
-use unrar::archive::{ArchiveList, ArchiveExtract};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::io::{self, Read};
+use tempfile::tempdir;
+use std::fs;
 
 pub struct RarImageArchive {
     path: PathBuf,
@@ -10,22 +12,48 @@ pub struct RarImageArchive {
 
 impl RarImageArchive {
     pub fn new(path: &Path) -> Result<Self, AppError> {
-        let mut entries = Vec::new();
-        let listing = Archive::new(path.to_str().unwrap()).list().process();
+        let output = Command::new("unrar")
+            .arg("l")
+            .arg("-c-") // no comments, cleaner output
+            .arg(path)
+            .output()
+            .map_err(|_| AppError::UnsupportedArchive)?;
 
-        match listing {
-            Ok(items) => {
-                for item in items.iter() {
-                    if let Some(name) = &item.filename {
-                        if name.ends_with(".jpg") || name.ends_with(".jpeg") || name.ends_with(".png") || name.ends_with(".gif") {
-                            entries.push(name.to_owned());
-                        }
-                    }
-                }
-                entries.sort();
-            }
-            Err(_) => return Err(AppError::UnsupportedArchive),
+        if !output.status.success() {
+            return Err(AppError::UnsupportedArchive);
         }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut entries = Vec::new();
+        let mut listing_started = false;
+
+        for line in stdout.lines() {
+            if line.trim().starts_with("--------") {
+                listing_started = true;
+                continue;
+            }
+            if listing_started {
+                // Each line looks like: attrs size date time name
+                // If line too short or blank, stop
+                if line.trim().is_empty() {
+                    break;
+                }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() < 5 {
+                    break;
+                }
+                let filename = parts[4..].join(" ");
+                let filename_lower = filename.to_lowercase();
+                if filename_lower.ends_with(".jpg")
+                    || filename_lower.ends_with(".jpeg")
+                    || filename_lower.ends_with(".png")
+                    || filename_lower.ends_with(".gif")
+                {
+                    entries.push(filename);
+                }
+            }
+        }
+        entries.sort();
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -40,18 +68,25 @@ impl ImageArchiveTrait for RarImageArchive {
     }
 
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError> {
+        let tmp_dir = tempdir().map_err(|_| AppError::UnsupportedArchive)?;
+        let status = Command::new("unrar")
+            .arg("x")
+            .arg("-y") // assume yes
+            .arg(&self.path)
+            .arg(filename)
+            .arg(tmp_dir.path())
+            .status()
+            .map_err(|_| AppError::UnsupportedArchive)?;
+
+        if !status.success() {
+            return Err(AppError::UnsupportedArchive);
+        }
+
+        let extracted_path = tmp_dir.path().join(filename);
+        let mut file = fs::File::open(&extracted_path).map_err(|_| AppError::NoImages)?;
         let mut buffer = Vec::new();
-        Archive::new(self.path.to_str().unwrap())
-            .extract()
-            .file(filename)
-            .process_to_memory()
-            .map_err(|_| AppError::UnsupportedArchive)
-            .and_then(|files| {
-                if let Some(file) = files.first() {
-                    Ok(file.data.clone())
-                } else {
-                    Err(AppError::NoImages)
-                }
-            })
+        file.read_to_end(&mut buffer).map_err(|_| AppError::NoImages)?;
+
+        Ok(buffer)
     }
 }

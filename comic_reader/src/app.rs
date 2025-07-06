@@ -132,6 +132,12 @@ impl CBZViewerApp {
     pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
         let mut app = Self::default();
         let archive = ImageArchive::process(&path)?;
+
+        if archive.kind == ImageArchiveType::Rar {
+            self.ui_logger
+                .warn("Rar archive are not reccomended for use.");
+        }
+
         let archive = Arc::new(Mutex::new(archive));
         if let Ok(guard) = archive.lock() {
             let filenames = guard.list_images();
@@ -141,8 +147,11 @@ impl CBZViewerApp {
             app.filenames = Some(filenames);
         }
         app.archive_path = Some(path);
+
+
         app.archive = Some(Arc::clone(&archive));
         *self = app; // Replace current app state with the new one
+
         return Ok(());
     }
 

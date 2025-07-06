@@ -21,12 +21,19 @@ pub trait ImageArchiveTrait: Send + Sync {
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImageArchiveType {
+    Zip,
+    Rar,
+}
+
 /// The main image archive abstraction
 pub struct ImageArchive {
     pub path: PathBuf,
     pub manifest: Manifest,
-    pub is_web_archive: bool,
+    // pub is_web_archive: bool,
     pub backend: Box<dyn ImageArchiveTrait>,
+    pub kind: ImageArchiveType,
 }
 
 impl ImageArchive {
@@ -51,8 +58,9 @@ impl ImageArchive {
                 Ok(Self {
                     path: path.to_path_buf(),
                     manifest,
-                    is_web_archive: is_web,
+                    // is_web_archive: is_web,
                     backend,
+                    kind: ImageArchiveType::Zip,
                 })
             }
             #[cfg(feature = "rar")]
@@ -61,8 +69,9 @@ impl ImageArchive {
                 Ok(Self {
                     path: path.to_path_buf(),
                     manifest: Manifest::default(),
-                    is_web_archive: false,
+                    // is_web_archive: false,
                     backend,
+                    kind: ImageArchiveType::Rar,
                 })
             }
             // _ if path.is_dir() => {
