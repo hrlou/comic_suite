@@ -48,7 +48,7 @@ pub fn new_image_cache(size: usize) -> SharedImageCache {
 /// Asynchronously load an image from the archive and insert into the cache.
 pub fn load_image_async(
     page: usize,
-    filenames: Vec<String>,
+    filenames: Arc<Vec<String>>,
     archive: Arc<Mutex<ImageArchive>>,
     image_lru: SharedImageCache,
     loading_pages: Arc<Mutex<std::collections::HashSet<usize>>>,
@@ -68,13 +68,13 @@ pub fn load_image_async(
         return Ok(());
     }
 
-    let filenames_clone = filenames.clone();
+    let filenames = Arc::clone(&filenames);
     let archive = archive.clone();
     let image_lru = image_lru.clone();
     let loading_pages = loading_pages.clone();
 
     std::thread::spawn(move || {
-        let filename = &filenames_clone[page];
+        let filename = &filenames[page];
         let mut archive = archive.lock().unwrap();
         let buf = archive.read_image_by_index(page).unwrap();
 

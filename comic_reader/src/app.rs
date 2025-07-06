@@ -135,7 +135,7 @@ impl CBZViewerApp {
 
         if archive.kind == ImageArchiveType::Rar {
             self.ui_logger
-                .warn("Rar archive are not reccomended for use.");
+                .warn("Rar archives are not recommended for use with this viewer.");
         }
 
         let archive = Arc::new(Mutex::new(archive));

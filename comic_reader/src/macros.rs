@@ -5,6 +5,7 @@ macro_rules! comic_filters {
 
         #[cfg(feature = "rar")]
         let dlg = dlg
+            .add_filter("Comic Book Archive", &["cbz", "zip", "cbr", "rar"])
             .add_filter("Comic ZIP", &["cbz", "zip"])
             .add_filter("Comic RAR", &["cbr", "rar"]);
 
