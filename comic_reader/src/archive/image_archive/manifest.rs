@@ -37,6 +37,15 @@ pub struct ManifestEditor<'a> {
     // url_input: String,
 }
 
+/// Archives that support embedded manifest metadata
+pub trait ManifestAware {
+    fn read_manifest(path: &Path) -> Result<Manifest, AppError>
+    where
+        Self: Sized;
+    fn write_manifest(&self, path: &Path, manifest: &Manifest) -> Result<(), AppError>;
+}
+
+
 impl<'a> ManifestEditor<'a> {
     pub fn new(manifest: &'a mut Manifest) -> Self {
         Self {

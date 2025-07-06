@@ -1,15 +1,19 @@
 use crate::prelude::*;
 
-// Wrapper for CBWs
-pub struct WebImageArchive {
-    pub path: PathBuf,
+/// WebImageArchive wraps any archive backend but overrides manifest handling.
+pub struct WebImageArchive<T> {
+    pub inner: T,
     pub manifest: Manifest,
 }
 
-impl WebImageArchive {
-    pub fn list_images(&self) -> Vec<String> {
-        // self.images.clone()
-        // todo!()
+impl<T: ImageArchiveTrait> WebImageArchive<T> {
+    pub fn new(inner: T, manifest: Manifest) -> Self {
+        Self { inner, manifest }
+    }
+}
+
+impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
+    fn list_images(&self) -> Vec<String> {
         if let Some(images) = self.manifest.external_pages.clone() {
             images.urls
         } else {
@@ -17,8 +21,7 @@ impl WebImageArchive {
         }
     }
 
-    pub fn read_image(&mut self, filename: &str) -> Result<Vec<u8>, crate::error::AppError> {
-        // Use reqwest blocking client to fetch image bytes
+    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError> {
         let resp = reqwest::blocking::get(filename).map_err(|e| {
             crate::error::AppError::NetworkError(format!("Failed to GET {}: {}", filename, e))
         })?;
@@ -36,5 +39,19 @@ impl WebImageArchive {
         })?;
 
         Ok(bytes.to_vec())
+    }
+}
+
+impl<T: ManifestAware> ManifestAware for WebImageArchive<T> {
+    fn read_manifest(path: &Path) -> Result<Manifest, AppError> {
+        let manifest = T::read_manifest(path)?;
+        // manifest.meta.web_archive = true;
+        Ok(manifest)
+    }
+
+    fn write_manifest(&self, path: &Path, manifest: &Manifest) -> Result<(), AppError> {
+        let mut patched = manifest.clone();
+        // patched.meta.web_archive = true;
+        self.inner.write_manifest(path, &patched)
     }
 }

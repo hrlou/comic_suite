@@ -76,7 +76,7 @@ pub fn load_image_async(
     std::thread::spawn(move || {
         let filename = &filenames_clone[page];
         let mut archive = archive.lock().unwrap();
-        let buf = archive.read_image(filename).unwrap();
+        let buf = archive.read_image_by_index(page).unwrap();
 
         let loaded_page = if filename.to_lowercase().ends_with(".gif") {
             // Decode GIF frames

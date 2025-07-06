@@ -1,14 +1,22 @@
+use crate::error::AppError;
+use crate::archive::image_archive::{Manifest, ManifestAware, ImageArchiveTrait};
+
 use crate::prelude::*;
 
-/// Wrapper for zip files, providing access to image files.
 pub struct ZipImageArchive {
-    pub path: PathBuf,
-    pub manifest: Manifest,
-    // Optionally: pub zip: ZipArchive<File>,
+    path: PathBuf,
 }
 
 impl ZipImageArchive {
-    pub fn list_images(&self) -> Vec<String> {
+    pub fn new(path: &Path) -> Result<Self, AppError> {
+        Ok(Self {
+            path: path.to_path_buf(),
+        })
+    }
+}
+
+impl ImageArchiveTrait for ZipImageArchive {
+    fn list_images(&self) -> Vec<String> {
         let file = match File::open(&self.path) {
             Ok(f) => f,
             Err(_) => return vec![],
@@ -22,11 +30,7 @@ impl ZipImageArchive {
         for i in 0..zip.len() {
             if let Ok(file) = zip.by_index(i) {
                 let name = file.name().to_string();
-                if name.ends_with(".jpg")
-                    || name.ends_with(".jpeg")
-                    || name.ends_with(".png")
-                    || name.ends_with(".gif")
-                {
+                if name.ends_with(".jpg") || name.ends_with(".jpeg") || name.ends_with(".png") || name.ends_with(".gif") {
                     images.push(name);
                 }
             }
@@ -35,14 +39,25 @@ impl ZipImageArchive {
         images
     }
 
-    pub fn read_manifest<P: AsRef<Path>>(path: P) -> Result<Manifest, AppError> {
-        let file = File::open(path.as_ref())?;
+    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError> {
+        let file = File::open(&self.path)?;
+        let mut zip = ZipArchive::new(file)?;
+        let mut file = zip.by_name(filename)?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf)?;
+        Ok(buf)
+    }
+}
+
+impl ManifestAware for ZipImageArchive {
+    fn read_manifest(path: &Path) -> Result<Manifest, AppError> {
+        let file = File::open(path)?;
         let mut zip = ZipArchive::new(file)?;
         let manifest_file = zip.by_name("manifest.toml");
 
-        if let Ok(mut manifest_file) = manifest_file {
+        if let Ok(mut mf) = manifest_file {
             let mut contents = String::new();
-            manifest_file.read_to_string(&mut contents)?;
+            mf.read_to_string(&mut contents)?;
             let manifest = toml::from_str(&contents)
                 .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
             Ok(manifest)
@@ -51,12 +66,9 @@ impl ZipImageArchive {
         }
     }
 
-    pub fn read_image(&mut self, filename: &str) -> Result<Vec<u8>, crate::error::AppError> {
-        let file = File::open(&self.path)?;
-        let mut zip = zip::ZipArchive::new(file)?;
-        let mut file = zip.by_name(filename)?;
-        let mut buf = Vec::new();
-        file.read_to_end(&mut buf)?;
-        Ok(buf)
+    fn write_manifest(&self, _path: &Path, _manifest: &Manifest) -> Result<(), AppError> {
+        // TODO: Implement manifest writing back into zip
+        // Err(AppError::)
+        todo!("ZipImageArchive::write_manifest not implemented yet")
     }
 }

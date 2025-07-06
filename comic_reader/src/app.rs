@@ -63,16 +63,6 @@ impl CBZViewerApp {
         crate::ui::setup_fonts(&cc.egui_ctx);
         let mut app = Self::default();
         if let Some(path) = path {
-            /*let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
-            if let Ok(guard) = archive.lock() {
-                let filenames = guard.list_images();
-                if filenames.is_empty() {
-                    return Err(AppError::NoImages);
-                }
-                app.filenames = Some(filenames);
-            }
-            app.archive_path = Some(path);
-            app.archive = Some(Arc::clone(&archive));*/
             let _ = app.load_new_file(path);
         }
         Ok(app)
@@ -287,19 +277,15 @@ impl eframe::App for CBZViewerApp {
         if self.show_manifest_editor {
             if let Some(archive_mutex) = &self.archive {
                 if let Ok(mut archive) = archive_mutex.lock() {
-                    if let Some((manifest, path)) = archive.manifest_mut_and_path() {
-                        Window::new("Edit Manifest")
-                            .open(&mut self.show_manifest_editor)
-                            .show(ctx, |ui| {
-                                let mut editor = ManifestEditor::new(manifest);
-                                if editor.ui(path, ui, ctx).is_err() {
-                                    self.ui_logger.error("Cannot edit Manifest");
-                                }
-                            });
-                    } else {
-                        self.ui_logger
-                            .error("Folder manifest editing is not supported.");
-                    }
+                    let (manifest, path) = archive.manifest_mut_and_path();
+                    Window::new("Edit Manifest")
+                        .open(&mut self.show_manifest_editor)
+                        .show(ctx, |ui| {
+                            let mut editor = ManifestEditor::new(manifest);
+                            if editor.ui(path, ui, ctx).is_err() {
+                                self.ui_logger.error("Cannot edit Manifest");
+                            }
+                        });
                 }
             }
         }

@@ -17,6 +17,8 @@ pub enum AppError {
     ManifestError(String),
     #[error("No images found in archive")]
     NoImages,
+    #[error("Index out of bound")]
+    IndexOutOfBounds,
     // #[error("Image not found: {0}")]
     // ImageNotFound(String),
     #[error("Unsupported archive type or not found")]
@@ -25,4 +27,5 @@ pub enum AppError {
     NetworkError(String),
     // #[error("Other error: {0}")]
     // Other(String),
+    
 }

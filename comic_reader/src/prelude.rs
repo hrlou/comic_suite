@@ -26,8 +26,8 @@ pub use zip::read::ZipArchive;
 pub use crate::{
     app::CBZViewerApp,
     archive::{
-        image_archive::manifest::{Manifest, ManifestEditor},
-        ImageArchive,
+        image_archive::manifest::{Manifest, ManifestEditor, ManifestAware},
+        ImageArchive, ImageArchiveTrait,
     },
     cache::{
         image_cache::{LoadedPage, PageImage},

@@ -23,7 +23,7 @@ serde = "1.0.219"
 base64ct = "1.7.0"
 
 [dependencies.unrar]
-version = "0.5"
+version = "0.7.1"
 optional = true
 
 [build-dependencies]
