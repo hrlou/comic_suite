@@ -1,5 +1,7 @@
 //! Main application state and logic.
 
+use core::arch;
+
 use crate::prelude::*;
 
 /// The main application struct, holding all state.
@@ -139,11 +141,12 @@ impl CBZViewerApp {
 
     pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
         let mut app = Self::default();
-        let archive = Arc::new(Mutex::new(ImageArchive::process(&path)?));
+        let archive = ImageArchive::process(&path)?;
+        let archive = Arc::new(Mutex::new(archive));
         if let Ok(guard) = archive.lock() {
             let filenames = guard.list_images();
             // if filenames.is_empty() {
-                // return Err(AppError::NoImages);
+            // return Err(AppError::NoImages);
             // }
             app.filenames = Some(filenames);
         }
@@ -163,22 +166,15 @@ impl CBZViewerApp {
     pub fn handle_file_options(&mut self) {
         if self.on_new_comic {
             self.on_new_comic = false;
-            if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Comic Book Archive", &["cbz", "zip"])
-                .set_file_name("Comic.cbz")
-                .save_file()
-            {
+            if let Some(path) = crate::comic_filters!().set_file_name("Comic").save_file() {
                 let _ = crate::utils::create_cbz_with_manifest(&path);
                 let _ = self.load_new_file(path);
                 return; // Prevent further update with old state
             }
-        } 
+        }
         if self.on_open_comic {
             self.on_open_comic = false;
-            if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Comic Book Archive", &["cbz", "zip"])
-                .pick_file()
-            {
+            if let Some(path) = crate::comic_filters!().set_file_name("Comic").pick_file() {
                 let _ = self.load_new_file(path);
                 return; // Prevent further update with old state
             }
@@ -214,7 +210,7 @@ impl eframe::App for CBZViewerApp {
 
             let filenames = self.filenames.clone().unwrap_or_default();
             total_pages = filenames.len();
-            
+
             if total_pages > 0 {
                 let response = draw_central_image_area(self, ctx, total_pages);
 
@@ -291,33 +287,18 @@ impl eframe::App for CBZViewerApp {
         if self.show_manifest_editor {
             if let Some(archive_mutex) = &self.archive {
                 if let Ok(mut archive) = archive_mutex.lock() {
-                    match &mut *archive {
-                        ImageArchive::Zip(zip) => {
-                            Window::new("Edit Manifest")
-                                .open(&mut self.show_manifest_editor)
-                                .show(ctx, |ui| {
-                                    let mut editor = ManifestEditor::new(&mut zip.manifest);
-                                    let editor = editor.ui(&zip.path, ui, ctx);
-                                    if editor.is_err() {
-                                        self.ui_logger.error("Cannot edit Manifest");
-                                    }
-                                });
-                        }
-                        ImageArchive::Web(web) => {
-                            Window::new("Edit Manifest")
-                                .open(&mut self.show_manifest_editor)
-                                .show(ctx, |ui| {
-                                    let mut editor = ManifestEditor::new(&mut web.manifest);
-                                    let editor = editor.ui(&web.path, ui, ctx);
-                                    if editor.is_err() {
-                                        self.ui_logger.error("Cannot edit Manifest");
-                                    }
-                                });
-                        }
-                        ImageArchive::Folder(_) => {
-                            self.ui_logger
-                                .error("Folder manifest editing is not supported.");
-                        }
+                    if let Some((manifest, path)) = archive.manifest_mut_and_path() {
+                        Window::new("Edit Manifest")
+                            .open(&mut self.show_manifest_editor)
+                            .show(ctx, |ui| {
+                                let mut editor = ManifestEditor::new(manifest);
+                                if editor.ui(path, ui, ctx).is_err() {
+                                    self.ui_logger.error("Cannot edit Manifest");
+                                }
+                            });
+                    } else {
+                        self.ui_logger
+                            .error("Folder manifest editing is not supported.");
                     }
                 }
             }

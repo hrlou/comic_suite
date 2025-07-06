@@ -3,7 +3,10 @@ use crate::{archive::manifest, prelude::*};
 use std::io::Write;
 use zip::{write::FileOptions, ZipWriter};
 
-pub fn rebuild_zip_with_manifest(original_path: &Path, manifest: &Manifest) -> Result<(), AppError> {
+pub fn rebuild_zip_with_manifest(
+    original_path: &Path,
+    manifest: &Manifest,
+) -> Result<(), AppError> {
     // Open original archive
     let original_file = File::open(original_path)?;
     let mut zip = ZipArchive::new(original_file)?;
@@ -55,7 +58,6 @@ pub fn create_cbz_with_manifest(path: &std::path::Path) -> Result<(), AppError> 
 
     let manifest_str = toml::to_string_pretty(&manifest)
         .map_err(|e| AppError::ManifestError(format!("Couldn't serialize: {}", e)))?;
-
 
     zip.start_file("manifest.toml", options)?;
     zip.write_all(manifest_str.as_bytes())?;

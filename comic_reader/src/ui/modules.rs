@@ -79,7 +79,7 @@ pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
             ui.close_menu();
         }
         if ui.button("Reload...").clicked() {
-            if let Some(path) = app.archive_path.clone() { 
+            if let Some(path) = app.archive_path.clone() {
                 let _ = app.load_new_file(path);
             } else {
                 app.ui_logger.warn("Failed to reload");

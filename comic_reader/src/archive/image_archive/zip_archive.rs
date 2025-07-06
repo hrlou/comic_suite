@@ -35,6 +35,22 @@ impl ZipImageArchive {
         images
     }
 
+    pub fn read_manifest<P: AsRef<Path>>(path: P) -> Result<Manifest, AppError> {
+        let file = File::open(path.as_ref())?;
+        let mut zip = ZipArchive::new(file)?;
+        let manifest_file = zip.by_name("manifest.toml");
+
+        if let Ok(mut manifest_file) = manifest_file {
+            let mut contents = String::new();
+            manifest_file.read_to_string(&mut contents)?;
+            let manifest = toml::from_str(&contents)
+                .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
+            Ok(manifest)
+        } else {
+            Ok(Manifest::default())
+        }
+    }
+
     pub fn read_image(&mut self, filename: &str) -> Result<Vec<u8>, crate::error::AppError> {
         let file = File::open(&self.path)?;
         let mut zip = zip::ZipArchive::new(file)?;

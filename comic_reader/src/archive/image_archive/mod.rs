@@ -4,18 +4,24 @@ use crate::prelude::*;
 
 pub mod manifest;
 
-pub mod zip_archive;
-pub use zip_archive::ZipImageArchive;
 pub mod folder_archive;
 pub use folder_archive::FolderImageArchive;
+#[cfg(feature = "rar")]
+pub mod rar_archive;
+#[cfg(feature = "rar")]
+pub use rar_archive::RarImageArchive;
 pub mod web_archive;
 pub use web_archive::WebImageArchive;
+pub mod zip_archive;
+pub use zip_archive::ZipImageArchive;
 
 /// Represents an archive of images, either from a zip file or a folder.
 pub enum ImageArchive {
     Zip(ZipImageArchive),
-    Folder(FolderImageArchive),
     Web(WebImageArchive),
+    Folder(FolderImageArchive),
+    #[cfg(feature = "rar")]
+    Rar(RarImageArchive),
 }
 
 impl ImageArchive {
@@ -30,32 +36,22 @@ impl ImageArchive {
                 .to_lowercase();
 
             match ext.as_str() {
+                #[cfg(feature = "rar")]
+                "cbr" | "rar" => {                
+                    let manifest = RarImageArchive::read_manifest(path)?;
+                    Ok(ImageArchive::Rar(RarImageArchive {
+                        path: path.to_path_buf(),
+                        manifest,
+                    }))
+                }
                 "cbz" | "zip" => {
-                    let file = File::open(path)?;
-                    let mut zip = ZipArchive::new(file)?;
-                    let manifest_file = zip.by_name("manifest.toml");
-
-                    if let Ok(mut manifest_file) = manifest_file {
-                        let mut contents = String::new();
-                        manifest_file.read_to_string(&mut contents)?;
-
-                        let manifest: manifest::Manifest = toml::from_str(&contents)
-                            .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
-
-                        if manifest.meta.web_archive {
-                            Ok(ImageArchive::Web(WebImageArchive { 
-                                path: path.to_path_buf(),
-                                manifest 
-                            }))
-                        } else {
-                            Ok(ImageArchive::Zip(ZipImageArchive {
-                                path: path.to_path_buf(),
-                                manifest,
-                            }))
-                        }
+                    let manifest = ZipImageArchive::read_manifest(path)?;
+                    if manifest.meta.web_archive {
+                        Ok(ImageArchive::Web(WebImageArchive {
+                            path: path.to_path_buf(),
+                            manifest,
+                        }))
                     } else {
-                        let manifest = Manifest::default();
-
                         Ok(ImageArchive::Zip(ZipImageArchive {
                             path: path.to_path_buf(),
                             manifest,
@@ -73,12 +69,27 @@ impl ImageArchive {
         }
     }
 
+    pub fn manifest_mut_and_path(&mut self) -> Option<(&mut Manifest, &Path)> {
+        match self {
+            ImageArchive::Zip(zip) => Some((&mut zip.manifest, &zip.path)),
+            ImageArchive::Web(web) => Some((&mut web.manifest, &web.path)),
+            ImageArchive::Folder(_) => None,
+            #[cfg(feature = "rar")]
+            ImageArchive::Rar(rar) => {
+                // RAR archives do not have a manifest, so we return None
+                None
+            }
+        }
+    }
+
     /// List image file names (flat, no nesting).
     pub fn list_images(&self) -> Vec<String> {
         match self {
             ImageArchive::Zip(zip) => zip.list_images(),
             ImageArchive::Folder(folder) => folder.list_images(),
             ImageArchive::Web(archive) => archive.list_images(),
+            #[cfg(feature = "rar")]
+            ImageArchive::Rar(rar) => rar.list_images(),
         }
     }
 
@@ -88,6 +99,8 @@ impl ImageArchive {
             ImageArchive::Zip(zip) => zip.read_image(filename),
             ImageArchive::Folder(folder) => folder.read_image(filename),
             ImageArchive::Web(archive) => archive.read_image(filename),
+            #[cfg(feature = "rar")]
+            ImageArchive::Rar(rar) => rar.read_image(filename),
         }
     }
 }
