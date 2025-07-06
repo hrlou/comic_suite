@@ -5,6 +5,10 @@ use std::io::{self, Read};
 use tempfile::tempdir;
 use std::fs;
 
+use std::os::windows::process::CommandExt;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 pub struct RarImageArchive {
     path: PathBuf,
     entries: Vec<String>,
@@ -16,6 +20,7 @@ impl RarImageArchive {
             .arg("l")
             .arg("-c-") // no comments, cleaner output
             .arg(path)
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map_err(|_| AppError::UnsupportedArchive)?;
 
@@ -75,6 +80,7 @@ impl ImageArchiveTrait for RarImageArchive {
             .arg(&self.path)
             .arg(filename)
             .arg(tmp_dir.path())
+            .creation_flags(CREATE_NO_WINDOW)
             .status()
             .map_err(|_| AppError::UnsupportedArchive)?;
 
