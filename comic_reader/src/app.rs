@@ -239,7 +239,7 @@ impl eframe::App for CBZViewerApp {
                 for &page in &pages_to_preload {
                     let _ = load_image_async(
                         page,
-                        filenames.clone(),
+                        Arc::new(filenames.clone()),
                         archive.clone(),
                         self.image_lru.clone(),
                         self.loading_pages.clone(),
