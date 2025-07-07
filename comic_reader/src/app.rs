@@ -1,6 +1,9 @@
 //! Main application state and logic.
 
-use crate::{archive::ZipImageArchive, prelude::*};
+use crate::{
+    archive::{self, ZipImageArchive},
+    prelude::*,
+};
 
 /// The main application struct, holding all state.
 pub struct CBZViewerApp {
@@ -207,110 +210,54 @@ impl CBZViewerApp {
         }
     }
 
-    fn display_manifest_editor(&mut self, ctx: &egui::Context) {
-        if let Some(archive_mutex) = &self.archive {
-            if let Ok(mut archive) = archive_mutex.lock() {
-                if !self.loading_pages.lock().unwrap().is_empty() {
-                    self.ui_logger.warn(
-                        "Please wait for all images to finish loading before editing the manifest.",
-                    );
-                } else {
-                    Window::new("Edit Manifest")
-                        .open(&mut self.show_manifest_editor)
-                        .show(ctx, |ui| {
-                            let mut editor = ManifestEditor::new(&mut archive);
-                            if editor.ui(ui, ctx).is_err() {
-                                self.ui_logger.error("Cannot edit Manifest");
-                            }
-                        });
-                }
+    pub fn preload_images(&mut self, archive: Arc<Mutex<ImageArchive>>) {
+        let filenames = self.filenames.clone().unwrap_or_default();
+
+        // Preload images for current view and next pages
+        let mut pages_to_preload = vec![self.current_page];
+        for offset in 1..=READ_AHEAD {
+            let next = self.current_page + offset;
+            if next < self.total_pages {
+                pages_to_preload.push(next);
+            }
+        }
+        for &page in &pages_to_preload {
+            let _ = load_image_async(
+                page,
+                Arc::new(filenames.clone()),
+                archive.clone(),
+                self.image_lru.clone(),
+                self.loading_pages.clone(),
+            );
+        }
+    }
+
+    pub fn on_changes(&mut self) {
+        if self.on_goto_page {
+            self.on_goto_page = false;
+            let page: usize = self.page_goto_box.parse().unwrap_or(0);
+            if self.goto_page(page - 1) {
+                self.ui_logger.info(format!("Navigated to page {}", page));
+            } else {
+                self.ui_logger
+                    .warn(format!("Failed to navigate to page {}", page));
             }
         }
     }
 
-    fn display_main(&mut self, ctx: &egui::Context) {
-        if let Some(archive) = self.archive.as_ref() {
-            let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
-
-            let filenames = self.filenames.clone().unwrap_or_default();
-
-            if self.total_pages > 0 {
-                let response = draw_central_image_area(self, ctx, self.total_pages);
-
-                // Check if mouse is over the zoom area and there is a scroll
-                if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                    let _zoomed = handle_zoom(
-                        &mut self.zoom,
-                        &mut self.pan_offset,
-                        cursor_pos,
-                        response.rect,
-                        ctx.input(|i| i.raw_scroll_delta.y),
-                        0.05,
-                        10.0,
-                        &mut self.texture_cache, // pass cursor_pos here
-                        &mut self.has_initialised_zoom,
-                    );
-                }
-
-                // Preload images for current view and next pages
-                let mut pages_to_preload = vec![self.current_page];
-                for offset in 1..=READ_AHEAD {
-                    let next = self.current_page + offset;
-                    if next < self.total_pages {
-                        pages_to_preload.push(next);
-                    }
-                }
-                for &page in &pages_to_preload {
-                    let _ = load_image_async(
-                        page,
-                        Arc::new(filenames.clone()),
-                        archive.clone(),
-                        self.image_lru.clone(),
-                        self.loading_pages.clone(),
-                    );
-                }
-
-                // Keyboard navigation
-                if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
-                    self.goto_next_page();
-                }
-                if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
-                    self.goto_prev_page();
-                }
-
-                if self.on_goto_page {
-                    self.on_goto_page = false;
-                    let page: usize = self.page_goto_box.parse().unwrap_or(0);
-                    if self.goto_page(page - 1) {
-                        self.ui_logger.info(format!("Navigated to page {}", page));
-                    } else {
-                        self.ui_logger
-                            .warn(format!("Failed to navigate to page {}", page));
-                    }
-                }
-            }
-        } else {
-            // No archive loaded, show a message
-            CentralPanel::default().show(ctx, |ui| {
-                ui.with_layout(
-                    egui::Layout::centered_and_justified(egui::Direction::TopDown),
-                    |ui| {
-                        ui.label(
-                            RichText::new("No Image Loaded \u{e09a}")
-                                .text_style(TextStyle::Heading),
-                        );
-                    },
-                );
-            });
+    pub fn handle_input(&mut self, ctx: &egui::Context) {
+        // Keyboard navigation
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+            self.goto_next_page();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+            self.goto_prev_page();
         }
     }
 }
 
 impl eframe::App for CBZViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // frame.storage_mut()
-        let mut total_pages = 0;
-
         // Check if file is dragged and dropped
         ctx.input(|i| {
             for file in &i.raw.dropped_files {
@@ -323,8 +270,14 @@ impl eframe::App for CBZViewerApp {
         });
 
         self.update_window_title(ctx);
-        self.display_main(ctx);
-        
+
+        if let Some(archive) = self.archive.as_ref() {
+            let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
+            self.display_main_full(ctx, archive);
+        } else {
+            self.display_main_empty(ctx);
+        }
+
         // Menu bar
         self.handle_file_options();
 
@@ -334,8 +287,8 @@ impl eframe::App for CBZViewerApp {
         }
 
         // Draw the top and bottom bars
-        draw_top_bar(self, ctx, total_pages);
-        draw_bottom_bar(self, ctx, total_pages);
+        self.display_top_bar(ctx);
+        self.display_bottom_bar(ctx);
 
         self.ui_logger.clear_expired();
     }

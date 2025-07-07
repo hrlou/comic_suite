@@ -1,12 +1,13 @@
 //! UI rendering and layout.
 
 pub mod image;
-pub mod layout;
+// pub mod layout;
+pub mod display;
 pub mod log;
 pub mod modules;
 
 pub use image::*;
-pub use layout::*;
+// pub use layout::*;
 pub use log::*;
 
 use crate::prelude::*;

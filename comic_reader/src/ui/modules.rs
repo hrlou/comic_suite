@@ -98,7 +98,7 @@ pub fn ui_edit(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
     });
 }
 
-pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui, total_pages: usize) {
+pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui) {
     let direction_label = if app.right_to_left {
         "\u{f191}"
     } else {
@@ -120,7 +120,7 @@ pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui, total_pages: usize) {
     {
         if app.double_page_mode {
             app.double_page_mode = false;
-            app.current_page = app.current_page.min(total_pages.saturating_sub(1));
+            app.current_page = app.current_page.min(app.total_pages.saturating_sub(1));
             app.has_initialised_zoom = false;
             app.texture_cache.clear();
         } else {
@@ -139,7 +139,7 @@ pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui, total_pages: usize) {
             .on_hover_text("Bump over a single page, use this if there is misalignment")
             .clicked()
         {
-            if app.current_page + 1 < total_pages {
+            if app.current_page + 1 < app.total_pages {
                 app.current_page += 1;
                 app.has_initialised_zoom = false;
                 app.texture_cache.clear();
