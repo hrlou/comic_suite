@@ -27,8 +27,8 @@ pub use crate::{
     app::CBZViewerApp,
     archive::{
         ImageArchive, ImageArchiveTrait, ImageArchiveType,
-        image_archive::manifest::{Manifest, ManifestAware, ManifestEditor},
     },
+    manifest::{Manifest, ManifestAware, ManifestEditor},
     cache::{
         SharedImageCache,
         image_cache::{LoadedPage, PageImage},

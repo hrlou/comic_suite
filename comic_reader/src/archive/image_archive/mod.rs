@@ -11,7 +11,7 @@ mod rar_archive;
 #[cfg(feature = "rar")]
 pub use rar_archive::RarImageArchive;
 
-pub mod manifest;
+// pub mod manifest;
 
 use crate::prelude::*;
 

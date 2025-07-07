@@ -11,6 +11,7 @@ mod ui;
 mod app;
 pub mod macros;
 pub mod utils;
+pub mod manifest;
 
 use crate::prelude::*;
 
