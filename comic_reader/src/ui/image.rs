@@ -26,9 +26,10 @@ macro_rules! draw_static {
             handle.clone()
         } else {
             let color_img = match &$loaded.image {
-                PageImage::Static(img) => {
-                    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &img.to_rgba8())
-                }
+                PageImage::Static(img) => egui::ColorImage::from_rgba_unmultiplied(
+                    [w as usize, h as usize],
+                    &img.to_rgba8(),
+                ),
                 _ => return,
             };
             let handle = ctx.load_texture(
@@ -41,10 +42,32 @@ macro_rules! draw_static {
         };
 
         let rect = Rect::from_center_size($area.center() + $pan, $disp_size);
-        $ui.allocate_ui_at_rect(rect, |ui| {
-            ui.add(Image::from_texture(&$handle).fit_to_exact_size($disp_size));
+        let builder = egui::UiBuilder::default().max_rect(rect);
+
+        $ui.allocate_new_ui(builder, |new_ui| {
+            new_ui.add(Image::from_texture(&$handle).fit_to_exact_size($disp_size));
         });
     }};
+}
+
+/// Macro to handle dual page drawing logic, including GIF/static dispatch.
+macro_rules! draw_page_at_rect {
+    ($ui:expr, $loaded:expr, $rect:expr, $disp_size:expr, $handle:expr, $cache:expr, $zoom:expr, $pan:expr) => {
+        match &$loaded.image {
+            PageImage::AnimatedGif { .. } => {
+                draw_gif_at_rect($ui, $loaded, $rect, $zoom, $pan, $cache);
+            }
+            PageImage::Static(_) => {
+                if let Some(handle) = &$handle {
+                    let builder = egui::UiBuilder::default().max_rect($rect);
+
+                    $ui.allocate_new_ui(builder, |ui| {
+                        ui.add(Image::from_texture(handle).fit_to_exact_size($disp_size));
+                    });
+                }
+            }
+        }
+    };
 }
 
 /// Draw a single page image, using the texture cache for efficiency.
@@ -60,24 +83,6 @@ pub fn draw_single_page(
         PageImage::AnimatedGif { .. } => draw_gif(ui, loaded, area, zoom, pan, cache),
         PageImage::Static(_) => draw_static!(ui, loaded, area, zoom, pan, cache, disp_size, handle),
     }
-}
-
-/// Macro to handle dual page drawing logic, including GIF/static dispatch.
-macro_rules! draw_page_at_rect {
-    ($ui:expr, $loaded:expr, $rect:expr, $disp_size:expr, $handle:expr, $cache:expr, $zoom:expr, $pan:expr) => {
-        match &$loaded.image {
-            PageImage::AnimatedGif { .. } => {
-                draw_gif_at_rect($ui, $loaded, $rect, $zoom, $pan, $cache);
-            }
-            PageImage::Static(_) => {
-                if let Some(handle) = &$handle {
-                    $ui.allocate_ui_at_rect($rect, |ui| {
-                        ui.add(Image::from_texture(handle).fit_to_exact_size($disp_size));
-                    });
-                }
-            }
-        }
-    };
 }
 
 /// Draw two pages side by side, using the texture cache for efficiency.
@@ -164,15 +169,51 @@ pub fn draw_dual_page(
         );
 
         if left_first {
-            draw_page_at_rect!(ui, loaded_left, rect_left, disp_size1, handle1, cache, zoom, pan);
+            draw_page_at_rect!(
+                ui,
+                loaded_left,
+                rect_left,
+                disp_size1,
+                handle1,
+                cache,
+                zoom,
+                pan
+            );
             if let Some(loaded2) = loaded_right {
-                draw_page_at_rect!(ui, loaded2, rect_right, disp_size2, Some(handle2), cache, zoom, pan);
+                draw_page_at_rect!(
+                    ui,
+                    loaded2,
+                    rect_right,
+                    disp_size2,
+                    Some(handle2),
+                    cache,
+                    zoom,
+                    pan
+                );
             }
         } else {
             if let Some(loaded2) = loaded_right {
-                draw_page_at_rect!(ui, loaded2, rect_left, disp_size2, Some(handle2), cache, zoom, pan);
+                draw_page_at_rect!(
+                    ui,
+                    loaded2,
+                    rect_left,
+                    disp_size2,
+                    Some(handle2),
+                    cache,
+                    zoom,
+                    pan
+                );
             }
-            draw_page_at_rect!(ui, loaded_left, rect_right, disp_size1, handle1, cache, zoom, pan);
+            draw_page_at_rect!(
+                ui,
+                loaded_left,
+                rect_right,
+                disp_size1,
+                handle1,
+                cache,
+                zoom,
+                pan
+            );
         }
     } else {
         // Only one page to show
@@ -258,8 +299,9 @@ pub fn draw_gif_at_rect(
             cache.set_animated(key, new_handle.clone());
             new_handle
         };
-
-        ui.allocate_ui_at_rect(rect, |ui| {
+        
+        let builder = egui::UiBuilder::default().max_rect(rect);
+        ui.allocate_new_ui(builder, |ui| {
             ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
         });
 

@@ -6,7 +6,8 @@ use std::process::Command;
 #[cfg(windows)]
 fn generate_inno_installer() {
     let version = env!("CARGO_PKG_VERSION");
-    let iss_content = format!(r#"
+    let iss_content = format!(
+        r#"
 [Setup]
 AppName=ComicReader
 AppVersion={}
@@ -24,7 +25,9 @@ Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignorevers
 [Icons]
 Name: "{{group}}\ComicReader"; Filename: "{{app}}\comic_reader.exe"
 Name: "{{group}}\Uninstall ComicReader"; Filename: "{{uninstallexe}}"
-"#, version);
+"#,
+        version
+    );
 
     let iss_path = Path::new("../target/installer.iss");
     fs::write(&iss_path, iss_content).expect("Failed to write installer.iss");

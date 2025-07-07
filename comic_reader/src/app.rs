@@ -1,6 +1,5 @@
 //! Main application state and logic.
 
-
 use crate::prelude::*;
 
 /// The main application struct, holding all state.
@@ -210,7 +209,10 @@ impl eframe::App for CBZViewerApp {
                     if !archive.manifest.meta.author.is_empty()
                         && archive.manifest.meta.author != "Unknown"
                     {
-                            title = format!("{} - {}", archive.manifest.meta.author, archive.manifest.meta.title);
+                        title = format!(
+                            "{} - {}",
+                            archive.manifest.meta.author, archive.manifest.meta.title
+                        );
                     }
                 } else if let Some(path) = &self.archive_path {
                     title = path
