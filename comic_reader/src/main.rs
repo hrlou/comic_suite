@@ -22,20 +22,6 @@ fn main() {
 
     log::info!("Initialising...");
 
-    // let path: Option<PathBuf> = std::env::args().nth(1)
-    //     .map(PathBuf::from);
-
-    // let app = CBZViewerApp::new(path).expect("Failed to load comic");
-    // let native_options = eframe::NativeOptions {
-    //     viewport: egui::ViewportBuilder::default().with_inner_size([WIN_WIDTH, WIN_HEIGHT]),
-    //     ..Default::default()
-    // };
-    // let _ = eframe::run_native(
-    //     "CBZ Viewer",
-    //     native_options,
-    //     Box::new(|_cc| Box::new(app)),
-    // );
-
     let path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
 
     let native_options = eframe::NativeOptions {
@@ -48,7 +34,7 @@ fn main() {
         native_options,
         Box::new(move |cc| {
             // Pass CreationContext to CBZViewerApp::new
-            Box::new(CBZViewerApp::new(cc, path.clone()).expect("Failed to load comic"))
+            Ok(Box::new(CBZViewerApp::new(cc, path.clone()).expect("Failed to load comic")))
         }),
     );
 }

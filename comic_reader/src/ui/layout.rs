@@ -76,11 +76,11 @@ pub fn draw_central_image_area(
 
         // Determine total size for clamping pan
         let total_size = if app.double_page_mode {
-            if let (Some(ref l1), Some(ref l2)) = (&loaded1, &loaded2) {
+            if let (Some(l1), Some(l2)) = (&loaded1, &loaded2) {
                 let (w1, h1) = l1.image.dimensions();
                 let (w2, h2) = l2.image.dimensions();
                 (w1 + w2, h1.max(h2))
-            } else if let Some(ref l1) = loaded1 {
+            } else if let Some(l1) = &loaded1 {
                 l1.image.dimensions()
             } else {
                 (0, 0)
@@ -109,7 +109,7 @@ pub fn draw_central_image_area(
 
         // Drawing happens after image_lru lock is dropped and pan handled
         if app.double_page_mode {
-            if let (Some(ref l1), Some(ref l2)) = (&loaded1, &loaded2) {
+            if let (Some(l1), Some(l2)) = (&loaded1, &loaded2) {
                 if !app.has_initialised_zoom {
                     app.reset_zoom(image_area, l1);
                 }
@@ -124,7 +124,7 @@ pub fn draw_central_image_area(
                     app.pan_offset,
                     &mut app.texture_cache,
                 );
-            } else if let Some(ref l1) = loaded1 {
+            } else if let Some(l1) = &loaded1 {
                 if !app.has_initialised_zoom {
                     app.reset_zoom(image_area, l1);
                 }

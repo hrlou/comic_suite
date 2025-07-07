@@ -8,9 +8,25 @@ pub struct Metadata {
     pub web_archive: bool,
 }
 
+impl Default for Metadata {
+    fn default() -> Self {
+        Self {
+            title: "Unknown".to_string(),
+            author: "Unknown".to_string(),
+            web_archive: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExternalPages {
     pub urls: Vec<String>,
+}
+
+impl Default for ExternalPages {
+    fn default() -> Self {
+        Self { urls: Vec::new() }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -21,12 +37,8 @@ pub struct Manifest {
 
 impl Default for Manifest {
     fn default() -> Self {
-        Manifest {
-            meta: Metadata {
-                title: "Unknown".to_string(),
-                author: "Unknown".to_string(),
-                web_archive: false,
-            },
+        Self {
+            meta: Metadata::default(),
             external_pages: None,
         }
     }
@@ -44,7 +56,6 @@ pub trait ManifestAware {
         Self: Sized;
     fn write_manifest(&self, path: &Path, manifest: &Manifest) -> Result<(), AppError>;
 }
-
 
 impl<'a> ManifestEditor<'a> {
     pub fn new(manifest: &'a mut Manifest) -> Self {
@@ -68,7 +79,7 @@ impl<'a> ManifestEditor<'a> {
             let urls = self
                 .manifest
                 .external_pages
-                .get_or_insert_with(|| ExternalPages { urls: vec![] });
+                .get_or_insert_with(ExternalPages::default);
 
             ui.separator();
             ui.label("External Page URLs:");

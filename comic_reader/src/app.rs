@@ -188,7 +188,7 @@ impl CBZViewerApp {
 }
 
 impl eframe::App for CBZViewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // frame.storage_mut()
         let mut total_pages = 0;
 
@@ -202,6 +202,22 @@ impl eframe::App for CBZViewerApp {
                 }
             }
         });
+
+        // Set the window title based on the archive name or path
+        if let Some(archive) = self.archive.as_ref() {
+            let mut title = NAME.to_string();
+            if let Ok(archive) = archive.lock() {
+                if !archive.manifest.meta.title.is_empty() && archive.manifest.meta.title != "Unknown" {
+                    title = archive.manifest.meta.title.clone();
+                } else if let Some(path) = &self.archive_path {
+                    title = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(NAME)
+                        .to_string();
+                }
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+        }
 
         if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);

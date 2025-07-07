@@ -1,5 +1,5 @@
 [workspace]
+resolver = "3"
 members = [
-    "comic_reader", "comic_thumb_provider", "comic_thumbgen",
+    "comic_reader",
 ]
-resolver = "2"

@@ -1,7 +1,6 @@
 //! Application-wide configuration constants.
 
-pub const NAME: &str = "Comic Reader";
-
+pub const NAME: &str = concat!("Comic Reader ", env!("CARGO_PKG_VERSION"));
 /// Default window width.
 pub const WIN_WIDTH: f32 = 720.0;
 /// Default window height.
