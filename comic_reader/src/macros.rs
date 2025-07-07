@@ -1,16 +1,14 @@
 #[macro_export]
 macro_rules! comic_exts {
-    () => {
+    () => {{
+        let mut v = vec!["cbz", "zip"];
+        #[cfg(feature = "rar")]
         {
-            let mut v = vec!["cbz", "zip"];
-            #[cfg(feature = "rar")]
-            {
-                v.push("cbr");
-                v.push("rar");
-            }
-            v
+            v.push("cbr");
+            v.push("rar");
         }
-    };
+        v
+    }};
 }
 
 #[macro_export]

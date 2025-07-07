@@ -25,10 +25,7 @@ pub use zip::read::ZipArchive;
 // crate modules
 pub use crate::{
     app::CBZViewerApp,
-    archive::{
-        ImageArchive, ImageArchiveTrait, ImageArchiveType,
-    },
-    manifest::{Manifest, ManifestAware, ManifestEditor},
+    archive::{ImageArchive, ImageArchiveTrait, ImageArchiveType},
     cache::{
         SharedImageCache,
         image_cache::{LoadedPage, PageImage},
@@ -37,6 +34,7 @@ pub use crate::{
     },
     config::*,
     error::AppError,
+    manifest::{Manifest, ManifestAware, ManifestEditor},
     ui::{
         clamp_pan, draw_bottom_bar, draw_central_image_area, draw_dual_page, draw_single_page,
         draw_spinner, draw_top_bar, handle_pan, handle_zoom, log::UiLogger,

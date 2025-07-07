@@ -10,10 +10,31 @@ mod ui;
 // mod util;
 mod app;
 pub mod macros;
-pub mod utils;
 pub mod manifest;
+pub mod utils;
 
 use crate::prelude::*;
+
+#[cfg(feature = "rar")]
+fn check_unrar() {
+    // Check for unrar in PATH
+    log::info!("Checking for 'unrar' in PATH...");
+    if which::which("unrar").is_err() {
+        // Show error dialog and exit
+        rfd::MessageDialog::new()
+            .set_title("Missing unrar")
+            .set_description(
+                "The 'unrar' executable was not found in your PATH.\nRAR archives will not open.",
+            )
+            .set_buttons(rfd::MessageButtons::Ok)
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+        // std::process::exit(1);
+        log::warn!("'unrar' not found in PATH. RAR archives will not open.");
+    } else {
+        log::info!("'unrar' found in PATH.");
+    }
+}
 
 fn main() {
     // Initialize logging (to file and console)
@@ -22,6 +43,9 @@ fn main() {
         .init();
 
     log::info!("Initialising...");
+
+    #[cfg(feature = "rar")]
+    check_unrar();
 
     let path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
 

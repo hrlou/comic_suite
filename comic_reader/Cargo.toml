@@ -22,6 +22,7 @@ toml = "0.8.12"
 serde = { version = "1.0.203", features = [ "derive" ] }
 base64ct = "1.7.0"
 tempfile = "3.10.1"
+which = { version = "6", optional = true }
 
 [build-dependencies]
 winres = "0.1.12"
@@ -41,4 +42,4 @@ path = "src/main.rs"
 [features]
 default = []
 windows_gui = []
-rar = []
+rar = [ "which" ]

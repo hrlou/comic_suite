@@ -11,7 +11,6 @@ pub fn draw_spinner(ui: &mut Ui, area: Rect) {
     ui.allocate_new_ui(builder, |ui| {
         ui.add(Spinner::new().size(spinner_size).color(Color32::WHITE));
     });
-
 }
 
 /// Macro to handle drawing a static image using the cache.
