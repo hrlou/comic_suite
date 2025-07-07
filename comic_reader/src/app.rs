@@ -25,6 +25,7 @@ pub struct CBZViewerApp {
     pub on_new_comic: bool,
     pub on_open_comic: bool,
     pub on_open_folder: bool,
+    pub total_pages: usize,
 }
 
 impl Default for CBZViewerApp {
@@ -51,6 +52,7 @@ impl Default for CBZViewerApp {
             on_new_comic: false,
             on_open_comic: false,
             on_open_folder: false,
+            total_pages: 0,
         }
     }
 }
@@ -137,7 +139,7 @@ impl CBZViewerApp {
             app.filenames = Some(filenames);
         }
         app.archive_path = Some(path);
-
+        app.total_pages = app.filenames.as_ref().map_or(0, |f| f.len());
         app.archive = Some(Arc::clone(&archive));
         *self = app; // Replace current app state with the new one
 
@@ -225,34 +227,15 @@ impl CBZViewerApp {
             }
         }
     }
-}
 
-impl eframe::App for CBZViewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // frame.storage_mut()
-        let mut total_pages = 0;
-
-        // Check if file is dragged and dropped
-        ctx.input(|i| {
-            for file in &i.raw.dropped_files {
-                if let Some(path) = &file.path {
-                    self.load_new_file(path.clone()).unwrap_or_else(|e| {
-                        self.ui_logger.error(format!("Failed to load file: {}", e));
-                    });
-                }
-            }
-        });
-
-        self.update_window_title(ctx);
-
+    fn display_main(&mut self, ctx: &egui::Context) {
         if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
 
             let filenames = self.filenames.clone().unwrap_or_default();
-            total_pages = filenames.len();
 
-            if total_pages > 0 {
-                let response = draw_central_image_area(self, ctx, total_pages);
+            if self.total_pages > 0 {
+                let response = draw_central_image_area(self, ctx, self.total_pages);
 
                 // Check if mouse is over the zoom area and there is a scroll
                 if let Some(cursor_pos) = ctx.input(|i| i.pointer.hover_pos()) {
@@ -273,7 +256,7 @@ impl eframe::App for CBZViewerApp {
                 let mut pages_to_preload = vec![self.current_page];
                 for offset in 1..=READ_AHEAD {
                     let next = self.current_page + offset;
-                    if next < total_pages {
+                    if next < self.total_pages {
                         pages_to_preload.push(next);
                     }
                 }
@@ -320,6 +303,28 @@ impl eframe::App for CBZViewerApp {
                 );
             });
         }
+    }
+}
+
+impl eframe::App for CBZViewerApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // frame.storage_mut()
+        let mut total_pages = 0;
+
+        // Check if file is dragged and dropped
+        ctx.input(|i| {
+            for file in &i.raw.dropped_files {
+                if let Some(path) = &file.path {
+                    self.load_new_file(path.clone()).unwrap_or_else(|e| {
+                        self.ui_logger.error(format!("Failed to load file: {}", e));
+                    });
+                }
+            }
+        });
+
+        self.update_window_title(ctx);
+        self.display_main(ctx);
+        
         // Menu bar
         self.handle_file_options();
 
