@@ -1,9 +1,9 @@
 use crate::prelude::*;
+use std::fs;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::io::{self, Read};
 use tempfile::tempdir;
-use std::fs;
 
 use std::os::windows::process::CommandExt;
 
@@ -91,7 +91,8 @@ impl ImageArchiveTrait for RarImageArchive {
         let extracted_path = tmp_dir.path().join(filename);
         let mut file = fs::File::open(&extracted_path).map_err(|_| AppError::NoImages)?;
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).map_err(|_| AppError::NoImages)?;
+        file.read_to_end(&mut buffer)
+            .map_err(|_| AppError::NoImages)?;
 
         Ok(buffer)
     }

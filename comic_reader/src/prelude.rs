@@ -9,15 +9,15 @@ pub use std::time::{Duration, Instant};
 
 // external crates
 pub use eframe::{
+    CreationContext,
     egui::{
         self, CentralPanel, Color32, Context, FontData, FontDefinitions, FontFamily, FontId, Image,
         Layout, /*Pos2,*/ Rect, RichText, Spinner, TextEdit, TextStyle, TextureHandle, Ui,
         Vec2, Window,
         /*ViewportCommand,*/
     },
-    CreationContext,
 };
-pub use image::{codecs::gif::GifDecoder, AnimationDecoder, DynamicImage, GenericImageView};
+pub use image::{AnimationDecoder, DynamicImage, GenericImageView, codecs::gif::GifDecoder};
 pub use log::{debug, warn};
 pub use lru::LruCache;
 pub use zip::read::ZipArchive;
@@ -26,14 +26,14 @@ pub use zip::read::ZipArchive;
 pub use crate::{
     app::CBZViewerApp,
     archive::{
-        image_archive::manifest::{Manifest, ManifestEditor, ManifestAware},
-        ImageArchive, ImageArchiveTrait, ImageArchiveType, 
+        ImageArchive, ImageArchiveTrait, ImageArchiveType,
+        image_archive::manifest::{Manifest, ManifestAware, ManifestEditor},
     },
     cache::{
+        SharedImageCache,
         image_cache::{LoadedPage, PageImage},
         load_image_async, new_image_cache,
         texture_cache::TextureCache,
-        SharedImageCache,
     },
     config::*,
     error::AppError,

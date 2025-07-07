@@ -27,5 +27,4 @@ pub enum AppError {
     NetworkError(String),
     // #[error("Other error: {0}")]
     // Other(String),
-    
 }

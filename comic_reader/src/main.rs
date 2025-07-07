@@ -34,7 +34,9 @@ fn main() {
         native_options,
         Box::new(move |cc| {
             // Pass CreationContext to CBZViewerApp::new
-            Ok(Box::new(CBZViewerApp::new(cc, path.clone()).expect("Failed to load comic")))
+            Ok(Box::new(
+                CBZViewerApp::new(cc, path.clone()).expect("Failed to load comic"),
+            ))
         }),
     );
 }

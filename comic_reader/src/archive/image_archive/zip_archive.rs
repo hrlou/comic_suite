@@ -1,5 +1,5 @@
+use crate::archive::image_archive::{ImageArchiveTrait, Manifest, ManifestAware};
 use crate::error::AppError;
-use crate::archive::image_archive::{Manifest, ManifestAware, ImageArchiveTrait};
 
 use crate::prelude::*;
 
@@ -30,7 +30,11 @@ impl ImageArchiveTrait for ZipImageArchive {
         for i in 0..zip.len() {
             if let Ok(file) = zip.by_index(i) {
                 let name = file.name().to_string();
-                if name.ends_with(".jpg") || name.ends_with(".jpeg") || name.ends_with(".png") || name.ends_with(".gif") {
+                if name.ends_with(".jpg")
+                    || name.ends_with(".jpeg")
+                    || name.ends_with(".png")
+                    || name.ends_with(".gif")
+                {
                     images.push(name);
                 }
             }

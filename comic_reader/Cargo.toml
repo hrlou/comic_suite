@@ -26,6 +26,7 @@ tempfile = "3.10.1"
 [build-dependencies]
 winres = "0.1.12"
 embed-resource = "2.4.1"
+which = "6"
 
 [profile.release]
 strip = true

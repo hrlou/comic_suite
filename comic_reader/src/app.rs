@@ -112,10 +112,8 @@ impl CBZViewerApp {
     pub fn goto_page(&mut self, page: usize) -> bool {
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
-                self.ui_logger.warn(format!(
-                    "Requested page {} is out of bounds.",
-                    page,
-                ));
+                self.ui_logger
+                    .warn(format!("Requested page {} is out of bounds.", page,));
                 return false;
             }
             self.current_page = page;
@@ -146,7 +144,6 @@ impl CBZViewerApp {
             app.filenames = Some(filenames);
         }
         app.archive_path = Some(path);
-
 
         app.archive = Some(Arc::clone(&archive));
         *self = app; // Replace current app state with the new one
@@ -207,10 +204,13 @@ impl eframe::App for CBZViewerApp {
         if let Some(archive) = self.archive.as_ref() {
             let mut title = NAME.to_string();
             if let Ok(archive) = archive.lock() {
-                if !archive.manifest.meta.title.is_empty() && archive.manifest.meta.title != "Unknown" {
+                if !archive.manifest.meta.title.is_empty()
+                    && archive.manifest.meta.title != "Unknown"
+                {
                     title = archive.manifest.meta.title.clone();
                 } else if let Some(path) = &self.archive_path {
-                    title = path.file_name()
+                    title = path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or(NAME)
                         .to_string();

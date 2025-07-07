@@ -15,7 +15,9 @@ pub fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     fonts.font_data.insert(
         "fa-solid".to_owned(),
-        std::sync::Arc::new(FontData::from_static(include_bytes!("../../assets/fa-solid-900.ttf"))),
+        std::sync::Arc::new(FontData::from_static(include_bytes!(
+            "../../assets/fa-solid-900.ttf"
+        ))),
     );
 
     fonts.families.insert(

@@ -50,7 +50,10 @@ impl ImageArchive {
                 let is_web = manifest.meta.web_archive;
 
                 let backend: Box<dyn ImageArchiveTrait> = if is_web {
-                    Box::new(WebImageArchive::new(ZipImageArchive::new(path)?, manifest.clone()))
+                    Box::new(WebImageArchive::new(
+                        ZipImageArchive::new(path)?,
+                        manifest.clone(),
+                    ))
                 } else {
                     Box::new(ZipImageArchive::new(path)?)
                 };

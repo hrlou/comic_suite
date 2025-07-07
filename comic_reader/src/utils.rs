@@ -1,7 +1,7 @@
 use crate::{archive::manifest, prelude::*};
 
 use std::io::Write;
-use zip::{write::FileOptions, ZipWriter};
+use zip::{ZipWriter, write::FileOptions};
 
 pub fn rebuild_zip_with_manifest(
     original_path: &Path,
