@@ -1,6 +1,6 @@
 // std
 pub use std::collections::HashSet;
-pub use std::fs::{self, File};
+pub use std::fs::{File};
 pub use std::io::{Cursor, Read};
 pub use std::num::NonZeroUsize;
 pub use std::path::{Path, PathBuf};

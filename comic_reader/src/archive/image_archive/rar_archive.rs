@@ -103,7 +103,7 @@ impl ImageArchiveTrait for RarImageArchive {
         ))
     }
 
-    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+    fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), AppError> {
         Err(AppError::ManifestError(
             "Rar archives do not support writing manifests".to_string(),
         ))

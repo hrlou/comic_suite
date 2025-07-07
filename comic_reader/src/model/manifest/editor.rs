@@ -1,5 +1,3 @@
-use core::arch;
-
 use crate::prelude::*;
 
 pub struct ManifestEditor<'a> {
