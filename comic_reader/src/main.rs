@@ -7,11 +7,10 @@ mod config;
 mod error;
 mod prelude;
 mod ui;
-// mod util;
+mod manifest;
 mod app;
-pub mod macros;
-pub mod manifest;
-pub mod utils;
+mod macros;
+mod utils;
 
 use crate::prelude::*;
 
