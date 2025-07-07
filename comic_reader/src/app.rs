@@ -1,6 +1,5 @@
 //! Main application state and logic.
 
-use core::arch;
 
 use crate::prelude::*;
 

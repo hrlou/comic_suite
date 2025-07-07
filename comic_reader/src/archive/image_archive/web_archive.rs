@@ -50,7 +50,7 @@ impl<T: ManifestAware> ManifestAware for WebImageArchive<T> {
     }
 
     fn write_manifest(&self, path: &Path, manifest: &Manifest) -> Result<(), AppError> {
-        let mut patched = manifest.clone();
+        let patched = manifest.clone();
         // patched.meta.web_archive = true;
         self.inner.write_manifest(path, &patched)
     }

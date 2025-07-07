@@ -1,4 +1,4 @@
-use crate::{archive::manifest, prelude::*};
+use crate::prelude::*;
 
 use std::io::Write;
 use zip::{ZipWriter, write::FileOptions};
@@ -12,7 +12,7 @@ pub fn rebuild_zip_with_manifest(
     let mut zip = ZipArchive::new(original_file)?;
 
     // Create a temporary output path next to original
-    let mut temp_path = original_path.with_extension("rebuild.tmp.zip");
+    let temp_path = original_path.with_extension("rebuild.tmp.zip");
     let mut temp_file = File::create(&temp_path)?;
 
     let mut writer = ZipWriter::new(&mut temp_file);
