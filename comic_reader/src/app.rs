@@ -113,9 +113,8 @@ impl CBZViewerApp {
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
                 self.ui_logger.warn(format!(
-                    "Requested page {} is out of bounds (max: {}).",
+                    "Requested page {} is out of bounds.",
                     page,
-                    filenames.len() - 1
                 ));
                 return false;
             }
