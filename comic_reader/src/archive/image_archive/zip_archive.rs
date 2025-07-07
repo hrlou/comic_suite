@@ -160,8 +160,7 @@ impl ImageArchiveTrait for ZipImageArchive {
 
         {
             let mut writer = ZipWriter::new(&mut temp_file);
-            let options = FileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
+            let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
             // Copy existing entries, skipping manifest.toml
             for i in 0..zip.len() {

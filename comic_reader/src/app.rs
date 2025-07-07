@@ -128,11 +128,6 @@ impl CBZViewerApp {
         let mut app = Self::default();
         let archive = ImageArchive::process(&path)?;
 
-        if archive.kind == ImageArchiveType::Rar {
-            self.ui_logger
-                .warn("Rar archives are not recommended for use with this viewer.");
-        }
-
         let archive = Arc::new(Mutex::new(archive));
         if let Ok(guard) = archive.lock() {
             let filenames = guard.list_images();
@@ -180,24 +175,8 @@ impl CBZViewerApp {
             }
         }
     }
-}
 
-impl eframe::App for CBZViewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // frame.storage_mut()
-        let mut total_pages = 0;
-
-        // Check if file is dragged and dropped
-        ctx.input(|i| {
-            for file in &i.raw.dropped_files {
-                if let Some(path) = &file.path {
-                    self.load_new_file(path.clone()).unwrap_or_else(|e| {
-                        self.ui_logger.error(format!("Failed to load file: {}", e));
-                    });
-                }
-            }
-        });
-
+    fn update_window_title(&self, ctx: &egui::Context) {
         // Set the window title based on the archive name or path
         if let Some(archive) = self.archive.as_ref() {
             let mut title = NAME.to_string();
@@ -224,6 +203,47 @@ impl eframe::App for CBZViewerApp {
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         }
+    }
+
+    fn display_manifest_editor(&mut self, ctx: &egui::Context) {
+        if let Some(archive_mutex) = &self.archive {
+            if let Ok(mut archive) = archive_mutex.lock() {
+                if !self.loading_pages.lock().unwrap().is_empty() {
+                    self.ui_logger.warn(
+                        "Please wait for all images to finish loading before editing the manifest.",
+                    );
+                } else {
+                    Window::new("Edit Manifest")
+                        .open(&mut self.show_manifest_editor)
+                        .show(ctx, |ui| {
+                            let mut editor = ManifestEditor::new(&mut archive);
+                            if editor.ui(ui, ctx).is_err() {
+                                self.ui_logger.error("Cannot edit Manifest");
+                            }
+                        });
+                }
+            }
+        }
+    }
+}
+
+impl eframe::App for CBZViewerApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // frame.storage_mut()
+        let mut total_pages = 0;
+
+        // Check if file is dragged and dropped
+        ctx.input(|i| {
+            for file in &i.raw.dropped_files {
+                if let Some(path) = &file.path {
+                    self.load_new_file(path.clone()).unwrap_or_else(|e| {
+                        self.ui_logger.error(format!("Failed to load file: {}", e));
+                    });
+                }
+            }
+        });
+
+        self.update_window_title(ctx);
 
         if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
@@ -305,22 +325,7 @@ impl eframe::App for CBZViewerApp {
 
         // Handle Manifest
         if self.show_manifest_editor {
-            if let Some(archive_mutex) = &self.archive {
-                if let Ok(mut archive) = archive_mutex.lock() {
-                    if !self.loading_pages.lock().unwrap().is_empty() {
-                        self.ui_logger.warn("Please wait for all images to finish loading before editing the manifest.");
-                    } else {
-                        Window::new("Edit Manifest")
-                            .open(&mut self.show_manifest_editor)
-                            .show(ctx, |ui| {
-                                let mut editor = ManifestEditor::new(&mut archive);
-                                if editor.ui(ui, ctx).is_err() {
-                                    self.ui_logger.error("Cannot edit Manifest");
-                                }
-                            });
-                    }
-                }
-            }
+            self.display_manifest_editor(ctx);
         }
 
         // Draw the top and bottom bars

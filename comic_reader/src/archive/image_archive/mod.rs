@@ -15,6 +15,29 @@ pub use rar_archive::RarImageArchive;
 
 use crate::prelude::*;
 
+#[macro_export]
+macro_rules! archive_case {
+    (
+        $archive_ty:ty, $path:expr
+    ) => {{
+        let archive = <$archive_ty>::new($path)?;
+        let manifest = archive.read_manifest().unwrap_or_default();
+        let is_web = manifest.meta.web_archive;
+
+        let backend: Box<dyn ImageArchiveTrait> = if is_web {
+            Box::new(WebImageArchive::new(archive, manifest.clone()))
+        } else {
+            Box::new(archive)
+        };
+
+        Ok(Self {
+            path: $path.to_path_buf(),
+            manifest,
+            backend,
+        })
+    }};
+}
+
 /// Common image archive interface
 pub trait ImageArchiveTrait: Send + Sync {
     fn list_images(&self) -> Vec<String>;
@@ -24,18 +47,18 @@ pub trait ImageArchiveTrait: Send + Sync {
     fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ImageArchiveType {
-    Zip,
-    Rar,
-}
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum ImageArchiveType {
+// Zip,
+// Rar,
+// }
 
 /// The main image archive abstraction
 pub struct ImageArchive {
     pub path: PathBuf,
     pub manifest: Manifest,
     pub backend: Box<dyn ImageArchiveTrait>,
-    pub kind: ImageArchiveType,
+    // pub kind: ImageArchiveType,
 }
 
 impl ImageArchive {
@@ -47,37 +70,9 @@ impl ImageArchive {
             .to_lowercase();
 
         match ext.as_str() {
-            "cbz" | "zip" => {
-                // let manifest = ZipImageArchive::read_manifest(path)?;
-                let zip_archive = ZipImageArchive::new(path)?;
-                let manifest = zip_archive.read_manifest().unwrap_or_default();
-                let is_web = manifest.meta.web_archive;
-
-                let backend: Box<dyn ImageArchiveTrait> = if is_web {
-                    Box::new(WebImageArchive::new(zip_archive, manifest.clone()))
-                } else {
-                    Box::new(zip_archive)
-                };
-
-                Ok(Self {
-                    path: path.to_path_buf(),
-                    manifest,
-                    // is_web_archive: is_web,
-                    backend,
-                    kind: ImageArchiveType::Zip,
-                })
-            }
+            "cbz" | "zip" => archive_case!(ZipImageArchive, path),
             #[cfg(feature = "rar")]
-            "cbr" | "rar" => {
-                let backend = Box::new(RarImageArchive::new(path)?);
-                Ok(Self {
-                    path: path.to_path_buf(),
-                    manifest: Manifest::default(),
-                    // is_web_archive: false,
-                    backend,
-                    kind: ImageArchiveType::Rar,
-                })
-            }
+            "cbr" | "rar" => archive_case!(RarImageArchive, path),
             // _ if path.is_dir() => {
             //     let backend = Box::new(crate::image_archive::folder_archive::FolderImageArchive::new(path)?);
             //     Ok(Self {

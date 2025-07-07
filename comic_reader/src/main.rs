@@ -13,24 +13,21 @@ mod ui;
 
 use crate::prelude::*;
 
-#[cfg(feature = "rar")]
-fn check_unrar() {
-    // Check for unrar in PATH
-    log::info!("Checking for 'unrar' in PATH...");
-    if which::which("unrar").is_err() {
-        // Show error dialog and exit
+fn check_bin(bin: &str, msg: &str) {
+    log::info!("Checking for '{}' in PATH...", bin);
+    if which::which(bin).is_err() {
         rfd::MessageDialog::new()
-            .set_title("Missing unrar")
-            .set_description(
-                "The 'unrar' executable was not found in your PATH.\nRAR archives will not open.",
-            )
+            .set_title(&format!("Missing {}", bin))
+            .set_description(&format!(
+                "The '{}' executable was not found in your PATH.\n{}",
+                bin, msg
+            ))
             .set_buttons(rfd::MessageButtons::Ok)
             .set_level(rfd::MessageLevel::Error)
             .show();
-        // std::process::exit(1);
-        log::warn!("'unrar' not found in PATH. RAR archives will not open.");
+        log::warn!("'{}' not found in PATH. {}", bin, msg);
     } else {
-        log::info!("'unrar' found in PATH.");
+        log::info!("'{}' found in PATH.", bin);
     }
 }
 
@@ -43,7 +40,10 @@ fn main() {
     log::info!("Initialising...");
 
     #[cfg(feature = "rar")]
-    check_unrar();
+    {
+        check_bin("unrar", "RAR archives will not open.");
+        check_bin("rar", "RAR archives will save.");
+    }
 
     let path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
 

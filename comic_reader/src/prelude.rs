@@ -1,6 +1,6 @@
 // std
 pub use std::collections::HashSet;
-pub use std::fs::{File};
+pub use std::fs::File;
 pub use std::io::{Cursor, Read};
 pub use std::num::NonZeroUsize;
 pub use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ pub use zip::read::ZipArchive;
 // crate modules
 pub use crate::{
     app::CBZViewerApp,
-    archive::{ImageArchive, ImageArchiveTrait, ImageArchiveType},
+    archive::{ImageArchive, ImageArchiveTrait},
     cache::{
         SharedImageCache,
         image_cache::{LoadedPage, PageImage},

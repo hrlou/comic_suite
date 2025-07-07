@@ -98,14 +98,100 @@ impl ImageArchiveTrait for RarImageArchive {
     }
 
     fn read_manifest(&self) -> Result<Manifest, AppError> {
-        Err(AppError::ManifestError(
-            "Rar archives do not support embedded manifests".to_string(),
-        ))
+        use std::fs;
+        use std::process::Command;
+        use tempfile::tempdir;
+
+        log::info!(
+            "Preparing to extract manifest.toml from RAR archive: {:?}",
+            &self.path
+        );
+
+        let tmp_dir = tempdir().map_err(|_| AppError::ManifestError("Tempdir failed".into()))?;
+        log::info!("Created temporary directory: {:?}", tmp_dir.path());
+
+        log::info!("Running 'unrar' to extract manifest.toml...");
+        let status = Command::new("unrar")
+            .arg("x")
+            .arg("-y")
+            .arg(&self.path)
+            .arg("manifest.toml")
+            .arg(tmp_dir.path())
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|_| AppError::ManifestError("Failed to run unrar".into()))?;
+
+        if !status.success() {
+            log::error!("unrar failed or manifest.toml not found in archive");
+            return Err(AppError::ManifestError(
+                "manifest.toml not found in archive".into(),
+            ));
+        }
+
+        let manifest_path = tmp_dir.path().join("manifest.toml");
+        log::info!("Reading manifest.toml from: {:?}", manifest_path);
+        let manifest_str = fs::read_to_string(&manifest_path)
+            .map_err(|_| AppError::ManifestError("Failed to read manifest.toml".into()))?;
+
+        log::info!("Parsing manifest.toml...");
+        let manifest: Manifest = toml::from_str(&manifest_str)
+            .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
+        log::info!("Successfully parsed manifest.toml");
+
+        Ok(manifest)
     }
 
-    fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), AppError> {
-        Err(AppError::ManifestError(
-            "Rar archives do not support writing manifests".to_string(),
-        ))
+    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+        use std::fs;
+        use std::process::Command;
+        use tempfile::tempdir;
+
+        log::info!(
+            "Preparing to write manifest to RAR archive: {:?}",
+            &self.path
+        );
+
+        // Write manifest to a temp file
+        let tmp_dir = tempdir().map_err(|_| AppError::ManifestError("Tempdir failed".into()))?;
+        let manifest_path = tmp_dir.path().join("manifest.toml");
+        log::info!(
+            "Writing manifest TOML to temporary file: {:?}",
+            manifest_path
+        );
+        let toml = toml::to_string_pretty(manifest)
+            .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
+        fs::write(&manifest_path, toml)
+            .map_err(|_| AppError::ManifestError("Failed to write temp manifest".into()))?;
+
+        // Use 'rar' to update the archive (requires WinRAR/rar.exe, not unrar)
+        log::info!(
+            "Running 'rar' to update manifest in archive: {:?}",
+            &self.path
+        );
+        let status = Command::new("rar")
+            .arg("u") // update
+            .arg("-ep1") // exclude base dir from names
+            .arg(&self.path)
+            .arg(&manifest_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|_| {
+                AppError::ManifestError(
+                    "Failed to run rar.exe (WinRAR required for writing)".into(),
+                )
+            })?;
+
+        if !status.success() {
+            log::error!("Failed to update manifest in archive (WinRAR required)");
+            return Err(AppError::ManifestError(
+                "Failed to update manifest in archive (WinRAR required)".into(),
+            ));
+        }
+
+        log::info!(
+            "Manifest successfully written to RAR archive: {:?}",
+            &self.path
+        );
+        Ok(())
     }
 }
