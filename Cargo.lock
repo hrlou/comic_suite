@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "comic_reader"
-version = "0.1.5"
+version = "0.1.6-rc1"
 dependencies = [
  "base64ct",
  "eframe",
