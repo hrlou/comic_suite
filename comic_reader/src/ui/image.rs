@@ -6,9 +6,12 @@ use crate::prelude::*;
 pub fn draw_spinner(ui: &mut Ui, area: Rect) {
     let spinner_size = 48.0;
     let spinner_rect = Rect::from_center_size(area.center(), Vec2::splat(spinner_size));
-    ui.allocate_ui_at_rect(spinner_rect, |ui| {
+    let builder = egui::UiBuilder::default().max_rect(spinner_rect);
+
+    ui.allocate_new_ui(builder, |ui| {
         ui.add(Spinner::new().size(spinner_size).color(Color32::WHITE));
     });
+
 }
 
 /// Macro to handle drawing a static image using the cache.
@@ -299,7 +302,7 @@ pub fn draw_gif_at_rect(
             cache.set_animated(key, new_handle.clone());
             new_handle
         };
-        
+
         let builder = egui::UiBuilder::default().max_rect(rect);
         ui.allocate_new_ui(builder, |ui| {
             ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
