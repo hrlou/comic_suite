@@ -1,6 +1,6 @@
 [package]
 name = "comic_reader"
-version = "0.1.6-rc1"
+version = "0.1.6-rc2"
 edition = "2024"
 
 [dependencies]
@@ -22,7 +22,7 @@ toml = "0.8.12"
 serde = { version = "1.0.203", features = [ "derive" ] }
 base64ct = "1.7.0"
 tempfile = "3.10.1"
-which = { version = "6", optional = true }
+which = "8.0.0"
 
 [build-dependencies]
 winres = "0.1.12"
@@ -42,4 +42,4 @@ path = "src/main.rs"
 [features]
 default = []
 windows_gui = []
-rar = [ "which" ]
+rar = [ ]

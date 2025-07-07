@@ -16,7 +16,7 @@ impl CBZViewerApp {
         });
     }
 
-    pub fn display_main_full(&mut self, ctx: &egui::Context, archive: Arc<Mutex<ImageArchive>>) {
+    pub fn display_main_full(&mut self, ctx: &egui::Context) {
         if self.total_pages > 0 {
             let response = self.display_central_image_area(ctx, self.total_pages);
 
@@ -35,10 +35,7 @@ impl CBZViewerApp {
                 );
             }
 
-            self.preload_images(archive);
             self.handle_input(ctx);
-
-            self.on_changes();
         }
     }
 

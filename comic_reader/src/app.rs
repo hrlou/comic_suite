@@ -156,31 +156,6 @@ impl CBZViewerApp {
         self.pan_offset = Vec2::ZERO;
     }
 
-    pub fn handle_file_options(&mut self) {
-        if self.on_new_comic {
-            self.on_new_comic = false;
-            if let Some(path) = crate::comic_filters!().set_file_name("Comic").save_file() {
-                let _ = ZipImageArchive::create_from_path(&path);
-                let _ = self.load_new_file(path);
-                return; // Prevent further update with old state
-            }
-        }
-        if self.on_open_comic {
-            self.on_open_comic = false;
-            if let Some(path) = crate::comic_filters!().set_file_name("Comic").pick_file() {
-                let _ = self.load_new_file(path);
-                return; // Prevent further update with old state
-            }
-        }
-        if self.on_open_folder {
-            self.on_open_folder = false;
-            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                let _ = self.load_new_file(path);
-                return;
-            }
-        }
-    }
-
     fn update_window_title(&self, ctx: &egui::Context) {
         // Set the window title based on the archive name or path
         if let Some(archive) = self.archive.as_ref() {
@@ -243,6 +218,28 @@ impl CBZViewerApp {
                     .warn(format!("Failed to navigate to page {}", page));
             }
         }
+        if self.on_new_comic {
+            self.on_new_comic = false;
+            if let Some(path) = crate::comic_filters!().set_file_name("Comic").save_file() {
+                let _ = ZipImageArchive::create_from_path(&path);
+                let _ = self.load_new_file(path);
+                return; // Prevent further update with old state
+            }
+        }
+        if self.on_open_comic {
+            self.on_open_comic = false;
+            if let Some(path) = crate::comic_filters!().set_file_name("Comic").pick_file() {
+                let _ = self.load_new_file(path);
+                return; // Prevent further update with old state
+            }
+        }
+        if self.on_open_folder {
+            self.on_open_folder = false;
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                let _ = self.load_new_file(path);
+                return;
+            }
+        }
     }
 
     pub fn handle_input(&mut self, ctx: &egui::Context) {
@@ -271,20 +268,39 @@ impl eframe::App for CBZViewerApp {
 
         self.update_window_title(ctx);
 
-        if let Some(archive) = self.archive.as_ref() {
+        
+
+        /*if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
-            self.display_main_full(ctx, archive);
+            self.preload_images(archive);
+            self.display_main_full(ctx);
         } else {
             self.display_main_empty(ctx);
         }
 
-        // Menu bar
-        self.handle_file_options();
-
         // Handle Manifest
         if self.show_manifest_editor {
             self.display_manifest_editor(ctx);
+        }*/
+
+        // Only preload images if we have an archive and not in manifest editor mode
+        if self.show_manifest_editor {
+            self.display_manifest_editor(ctx);
+        } else {
+            if let Some(archive) = self.archive.as_ref() {
+                let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
+                self.preload_images(archive);
+            }
         }
+            
+        
+        if self.total_pages > 0 {
+            self.display_main_full(ctx);
+        } else {
+            self.display_main_empty(ctx);
+        }
+
+        self.on_changes();
 
         // Draw the top and bottom bars
         self.display_top_bar(ctx);
