@@ -35,6 +35,7 @@ impl CBZViewerApp {
                 );
             }
 
+            self.preload_images(archive);
             self.handle_input(ctx);
 
             self.on_changes();
