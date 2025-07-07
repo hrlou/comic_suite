@@ -19,6 +19,7 @@ use crate::prelude::*;
 pub trait ImageArchiveTrait: Send + Sync {
     fn list_images(&self) -> Vec<String>;
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError>;
+    // fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, AppError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +32,6 @@ pub enum ImageArchiveType {
 pub struct ImageArchive {
     pub path: PathBuf,
     pub manifest: Manifest,
-    // pub is_web_archive: bool,
     pub backend: Box<dyn ImageArchiveTrait>,
     pub kind: ImageArchiveType,
 }
@@ -90,9 +90,9 @@ impl ImageArchive {
         }
     }
 
-    pub fn manifest_mut_and_path(&mut self) -> (&mut Manifest, &Path) {
-        (&mut self.manifest, self.path.as_path())
-    }
+    // pub fn manifest_mut_and_path(&mut self) -> (&mut Manifest, &Path) {
+        // (&mut self.manifest, self.path.as_path())
+    // }
 
     pub fn list_images(&self) -> Vec<String> {
         self.backend.list_images()

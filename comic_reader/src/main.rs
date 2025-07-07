@@ -7,7 +7,7 @@ mod config;
 mod error;
 mod prelude;
 mod ui;
-mod manifest;
+mod model;
 mod app;
 mod macros;
 mod utils;

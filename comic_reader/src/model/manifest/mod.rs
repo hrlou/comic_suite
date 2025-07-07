@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use serde::{Deserialize, Serialize};
+
 pub mod editor;
-pub use editor::ManifestEditor;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Metadata {
@@ -52,5 +52,4 @@ pub trait ManifestAware {
     where
         Self: Sized;
     fn write_manifest(&self, path: &Path, manifest: &Manifest) -> Result<(), AppError>;
-    // fn manifest_mut(&mut self) -> &mut Manifest;
 }
