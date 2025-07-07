@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+#[cfg(windows)]
 fn generate_inno_installer() {
     let version = env!("CARGO_PKG_VERSION");
     let iss_content = format!(r#"
@@ -17,8 +18,8 @@ Compression=lzma
 SolidCompression=yes
 
 [Files]
-Source: "target\release\comic_reader.exe"; DestDir: "{{app}}"; Flags: ignoreversion
-Source: "comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "release\comic_reader.exe"; DestDir: "{{app}}\comic_reader.exe"; Flags: ignoreversion
+Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{{group}}\ComicReader"; Filename: "{{app}}\comic_reader.exe"
@@ -50,7 +51,11 @@ Name: "{{group}}\Uninstall ComicReader"; Filename: "{{uninstallexe}}"
 fn main() {
     embed_resource::compile("app.rc", std::iter::empty::<&str>());
 
-    if env::var("PROFILE").unwrap_or_default() == "release" {
-        generate_inno_installer();
+    #[cfg(windows)]
+    {
+        if env::var("PROFILE").unwrap_or_default() == "release" {
+            println!("Generating installer.iss...");
+            generate_inno_installer();
+        }
     }
 }
