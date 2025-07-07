@@ -11,6 +11,42 @@ pub fn draw_spinner(ui: &mut Ui, area: Rect) {
     });
 }
 
+/// Macro to handle drawing a static image using the cache.
+/// Reduces boilerplate for both single and dual page drawing.
+macro_rules! draw_static {
+    ($ui:expr, $loaded:expr, $area:expr, $zoom:expr, $pan:expr, $cache:expr, $disp_size:ident, $handle:ident) => {{
+        let (w, h) = match &$loaded.image {
+            PageImage::Static(img) => img.dimensions(),
+            _ => return,
+        };
+        let $disp_size = Vec2::new(w as f32 * $zoom, h as f32 * $zoom);
+
+        let ctx = $ui.ctx().clone();
+        let $handle = if let Some(handle) = $cache.get_single($loaded.index, $zoom) {
+            handle.clone()
+        } else {
+            let color_img = match &$loaded.image {
+                PageImage::Static(img) => {
+                    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &img.to_rgba8())
+                }
+                _ => return,
+            };
+            let handle = ctx.load_texture(
+                format!("tex{}_{}", $loaded.index, $zoom),
+                color_img,
+                egui::TextureOptions::default(),
+            );
+            $cache.set_single($loaded.index, $zoom, handle.clone());
+            handle
+        };
+
+        let rect = Rect::from_center_size($area.center() + $pan, $disp_size);
+        $ui.allocate_ui_at_rect(rect, |ui| {
+            ui.add(Image::from_texture(&$handle).fit_to_exact_size($disp_size));
+        });
+    }};
+}
+
 /// Draw a single page image, using the texture cache for efficiency.
 pub fn draw_single_page(
     ui: &mut Ui,
@@ -22,47 +58,26 @@ pub fn draw_single_page(
 ) {
     match &loaded.image {
         PageImage::AnimatedGif { .. } => draw_gif(ui, loaded, area, zoom, pan, cache),
-        PageImage::Static(_) => draw_static_image(ui, loaded, area, zoom, pan, cache),
+        PageImage::Static(_) => draw_static!(ui, loaded, area, zoom, pan, cache, disp_size, handle),
     }
 }
 
-fn draw_static_image(
-    ui: &mut Ui,
-    loaded: &LoadedPage,
-    area: Rect,
-    zoom: f32,
-    pan: Vec2,
-    cache: &mut TextureCache,
-) {
-    let (w, h) = match &loaded.image {
-        PageImage::Static(img) => img.dimensions(),
-        _ => return,
-    };
-    let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
-
-    let ctx = ui.ctx().clone();
-    let handle = if let Some(handle) = cache.get_single(loaded.index, zoom) {
-        handle.clone()
-    } else {
-        let color_img = match &loaded.image {
-            PageImage::Static(img) => {
-                egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &img.to_rgba8())
+/// Macro to handle dual page drawing logic, including GIF/static dispatch.
+macro_rules! draw_page_at_rect {
+    ($ui:expr, $loaded:expr, $rect:expr, $disp_size:expr, $handle:expr, $cache:expr, $zoom:expr, $pan:expr) => {
+        match &$loaded.image {
+            PageImage::AnimatedGif { .. } => {
+                draw_gif_at_rect($ui, $loaded, $rect, $zoom, $pan, $cache);
             }
-            _ => return,
-        };
-        let handle = ctx.load_texture(
-            format!("tex{}_{}", loaded.index, zoom),
-            color_img,
-            egui::TextureOptions::default(),
-        );
-        cache.set_single(loaded.index, zoom, handle.clone());
-        handle
+            PageImage::Static(_) => {
+                if let Some(handle) = &$handle {
+                    $ui.allocate_ui_at_rect($rect, |ui| {
+                        ui.add(Image::from_texture(handle).fit_to_exact_size($disp_size));
+                    });
+                }
+            }
+        }
     };
-
-    let rect = Rect::from_center_size(area.center() + pan, disp_size);
-    ui.allocate_ui_at_rect(rect, |ui| {
-        ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size));
-    });
 }
 
 /// Draw two pages side by side, using the texture cache for efficiency.
@@ -77,46 +92,43 @@ pub fn draw_dual_page(
     pan: Vec2,
     cache: &mut TextureCache,
 ) {
-    let ctx = ui.ctx().clone(); // clone context early to avoid ui borrow conflicts
+    let ctx = ui.ctx().clone();
 
-    // Helper function: returns display size and owned clone of texture handle (if any)
+    // Helper: get display size and texture handle for a page
     fn get_page_data(
         page: &LoadedPage,
         zoom: f32,
         cache: &mut TextureCache,
         ctx: &egui::Context,
     ) -> Option<(Vec2, Option<egui::TextureHandle>)> {
-        let (w, h) = match &page.image {
-            PageImage::Static(img) => img.dimensions(),
+        match &page.image {
+            PageImage::Static(img) => {
+                let (w, h) = img.dimensions();
+                let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
+                let handle = if let Some(h) = cache.get_single(page.index, zoom) {
+                    Some(h.clone())
+                } else {
+                    let rgba_bytes = img.to_rgba8();
+                    let color_img = egui::ColorImage::from_rgba_unmultiplied(
+                        [w as usize, h as usize],
+                        rgba_bytes.as_flat_samples().as_slice(),
+                    );
+                    let h = ctx.load_texture(
+                        format!("tex{}_{}", page.index, zoom),
+                        color_img,
+                        egui::TextureOptions::default(),
+                    );
+                    cache.set_single(page.index, zoom, h.clone());
+                    Some(h)
+                };
+                Some((disp_size, handle))
+            }
             PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
-                (frames[0].size[0] as u32, frames[0].size[1] as u32)
+                let (w, h) = (frames[0].size[0] as u32, frames[0].size[1] as u32);
+                Some((Vec2::new(w as f32 * zoom, h as f32 * zoom), None))
             }
-            _ => return None,
-        };
-        let disp_size = Vec2::new(w as f32 * zoom, h as f32 * zoom);
-
-        let handle = if let PageImage::Static(img) = &page.image {
-            if let Some(handle) = cache.get_single(page.index, zoom) {
-                Some(handle.clone()) // clone owned handle, no borrow leak
-            } else {
-                let rgba_bytes = img.to_rgba8();
-                let color_img = egui::ColorImage::from_rgba_unmultiplied(
-                    [w as usize, h as usize],
-                    rgba_bytes.as_flat_samples().as_slice(),
-                );
-                let handle = ctx.load_texture(
-                    format!("tex{}_{}", page.index, zoom),
-                    color_img,
-                    egui::TextureOptions::default(),
-                );
-                cache.set_single(page.index, zoom, handle.clone());
-                Some(handle)
-            }
-        } else {
-            None
-        };
-
-        Some((disp_size, handle))
+            _ => None,
+        }
     }
 
     let (disp_size1, handle1) = match get_page_data(loaded_left, zoom, cache, &ctx) {
@@ -152,74 +164,24 @@ pub fn draw_dual_page(
         );
 
         if left_first {
-            match &loaded_left.image {
-                PageImage::AnimatedGif { .. } => {
-                    draw_gif_at_rect(ui, loaded_left, rect_left, zoom, pan, cache);
-                }
-                PageImage::Static(_) => {
-                    if let Some(handle) = handle1 {
-                        ui.allocate_ui_at_rect(rect_left, |ui| {
-                            ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size1));
-                        });
-                    }
-                }
-            }
+            draw_page_at_rect!(ui, loaded_left, rect_left, disp_size1, handle1, cache, zoom, pan);
             if let Some(loaded2) = loaded_right {
-                match &loaded2.image {
-                    PageImage::AnimatedGif { .. } => {
-                        draw_gif_at_rect(ui, loaded2, rect_right, zoom, pan, cache);
-                    }
-                    PageImage::Static(_) => {
-                        ui.allocate_ui_at_rect(rect_right, |ui| {
-                            ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
-                        });
-                    }
-                }
+                draw_page_at_rect!(ui, loaded2, rect_right, disp_size2, Some(handle2), cache, zoom, pan);
             }
         } else {
             if let Some(loaded2) = loaded_right {
-                match &loaded2.image {
-                    PageImage::AnimatedGif { .. } => {
-                        draw_gif_at_rect(ui, loaded2, rect_left, zoom, pan, cache);
-                    }
-                    PageImage::Static(_) => {
-                        ui.allocate_ui_at_rect(rect_left, |ui| {
-                            ui.add(Image::from_texture(&handle2).fit_to_exact_size(disp_size2));
-                        });
-                    }
-                }
+                draw_page_at_rect!(ui, loaded2, rect_left, disp_size2, Some(handle2), cache, zoom, pan);
             }
-            match &loaded_left.image {
-                PageImage::AnimatedGif { .. } => {
-                    draw_gif_at_rect(ui, loaded_left, rect_right, zoom, pan, cache);
-                }
-                PageImage::Static(_) => {
-                    if let Some(handle) = handle1 {
-                        ui.allocate_ui_at_rect(rect_right, |ui| {
-                            ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size1));
-                        });
-                    }
-                }
-            }
+            draw_page_at_rect!(ui, loaded_left, rect_right, disp_size1, handle1, cache, zoom, pan);
         }
     } else {
+        // Only one page to show
         let rect = egui::Rect::from_center_size(center, disp_size1);
-        match &loaded_left.image {
-            PageImage::AnimatedGif { .. } => {
-                draw_gif_at_rect(ui, loaded_left, rect, zoom, pan, cache);
-            }
-            PageImage::Static(_) => {
-                if let Some(handle) = handle1 {
-                    ui.allocate_ui_at_rect(rect, |ui| {
-                        ui.add(Image::from_texture(&handle).fit_to_exact_size(disp_size1));
-                    });
-                }
-            }
-        }
+        draw_page_at_rect!(ui, loaded_left, rect, disp_size1, handle1, cache, zoom, pan);
     }
 }
 
-/// Draw a GIF in the given area by forwarding to `draw_gif_at_rect` (calls must pass cache).
+/// Draw a GIF in the given area by forwarding to `draw_gif_at_rect`.
 pub fn draw_gif(
     ui: &mut Ui,
     loaded: &LoadedPage,
@@ -246,6 +208,7 @@ pub fn draw_gif(
 }
 
 /// Draw a GIF at the specified rect, using the texture cache to avoid reloads.
+/// Handles frame timing and texture management for animated playback.
 pub fn draw_gif_at_rect(
     ui: &mut Ui,
     loaded: &LoadedPage,
@@ -265,6 +228,7 @@ pub fn draw_gif_at_rect(
             return;
         }
 
+        // Compute which frame to show based on elapsed time and per-frame delays
         let elapsed = start_time.elapsed().as_millis() as u64;
         let total_duration: u64 = delays.iter().map(|d| *d as u64).sum();
         let t = elapsed % total_duration;
@@ -299,10 +263,13 @@ pub fn draw_gif_at_rect(
             ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
         });
 
+        // Request repaint for smooth animation
         ui.ctx().request_repaint();
     }
 }
 
+/// Clamp the pan offset so the image stays within the viewport bounds.
+/// Uses a spring-back effect for smoothness.
 pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), viewport_rect: egui::Rect) {
     let (img_w, img_h) = image_dims;
     let viewport_size = viewport_rect.size();
@@ -318,7 +285,7 @@ pub fn clamp_pan(app: &mut CBZViewerApp, image_dims: (u32, u32), viewport_rect: 
     let max_pan_x = ((scaled_w - viewport_size.x) / 2.0 + margin_x).max(0.0);
     let max_pan_y = ((scaled_h - viewport_size.y) / 2.0 + margin_y).max(0.0);
 
-    // Smooth spring-back factor
+    // Spring-back factor for smooth clamping
     let k = 0.2;
 
     let target_x = app.pan_offset.x.clamp(-max_pan_x, max_pan_x);
@@ -351,23 +318,13 @@ pub fn handle_pan(
         }
     }
 
-    // if response.drag_released() {
     if response.drag_stopped() {
         *drag_start = None;
     }
 }
 
 /// Handle zooming centered at the cursor position.
-///
-/// `zoom`: current zoom level.
-/// `pan_offset`: current pan offset (will be adjusted).
-/// `cursor_pos`: cursor position in screen coords.
-/// `area_rect`: rect of the image/view in screen coords.
-/// `scroll_delta_y`: vertical scroll delta (positive to zoom in).
-/// `min_zoom`, `max_zoom`: zoom clamp range.
-/// `texture_cache`: texture cache to clear on zoom change.
-/// `has_initialised_zoom`: mutable flag to track first zoom event.
-///
+/// Adjusts pan so the zoom is focused at the cursor.
 /// Returns true if zoom changed.
 pub fn handle_zoom(
     zoom: &mut f32,
@@ -392,6 +349,7 @@ pub fn handle_zoom(
     *zoom = (*zoom * zoom_factor).clamp(min_zoom, max_zoom);
 
     if (*zoom - old_zoom).abs() > f32::EPSILON {
+        // Adjust pan so the zoom is centered at the cursor
         let cursor_rel = egui::vec2(
             cursor_pos.x - area_rect.center().x,
             cursor_pos.y - area_rect.center().y,
