@@ -208,6 +208,11 @@ impl eframe::App for CBZViewerApp {
                     && archive.manifest.meta.title != "Unknown"
                 {
                     title = archive.manifest.meta.title.clone();
+                    if !archive.manifest.meta.author.is_empty()
+                        && archive.manifest.meta.author != "Unknown"
+                    {
+                            title = format!("{} - {}", archive.manifest.meta.author, archive.manifest.meta.title);
+                    }
                 } else if let Some(path) = &self.archive_path {
                     title = path
                         .file_name()
