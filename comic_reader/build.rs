@@ -18,7 +18,7 @@ Compression=lzma
 SolidCompression=yes
 
 [Files]
-Source: "release\comic_reader.exe"; DestDir: "{{app}}\comic_reader.exe"; Flags: ignoreversion
+Source: "release\comic_reader.exe"; DestDir: "{{app}}"; Flags: ignoreversion
 Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
