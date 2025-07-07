@@ -96,4 +96,16 @@ impl ImageArchiveTrait for RarImageArchive {
 
         Ok(buffer)
     }
+
+    fn read_manifest(&self) -> Result<Manifest, AppError> {
+        Err(AppError::ManifestError(
+            "Rar archives do not support embedded manifests".to_string(),
+        ))
+    }
+
+    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+        Err(AppError::ManifestError(
+            "Rar archives do not support writing manifests".to_string(),
+        ))
+    }
 }

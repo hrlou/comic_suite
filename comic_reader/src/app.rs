@@ -1,6 +1,6 @@
 //! Main application state and logic.
 
-use crate::prelude::*;
+use crate::{archive::ZipImageArchive, prelude::*};
 
 /// The main application struct, holding all state.
 pub struct CBZViewerApp {
@@ -160,7 +160,7 @@ impl CBZViewerApp {
         if self.on_new_comic {
             self.on_new_comic = false;
             if let Some(path) = crate::comic_filters!().set_file_name("Comic").save_file() {
-                let _ = crate::utils::create_cbz_with_manifest(&path);
+                let _ = ZipImageArchive::create_from_path(&path);
                 let _ = self.load_new_file(path);
                 return; // Prevent further update with old state
             }
@@ -307,15 +307,18 @@ impl eframe::App for CBZViewerApp {
         if self.show_manifest_editor {
             if let Some(archive_mutex) = &self.archive {
                 if let Ok(mut archive) = archive_mutex.lock() {
-                    let (manifest, path) = archive.manifest_mut_and_path();
-                    Window::new("Edit Manifest")
-                        .open(&mut self.show_manifest_editor)
-                        .show(ctx, |ui| {
-                            let mut editor = ManifestEditor::new(manifest);
-                            if editor.ui(path, ui, ctx).is_err() {
-                                self.ui_logger.error("Cannot edit Manifest");
-                            }
-                        });
+                    if !self.loading_pages.lock().unwrap().is_empty() {
+                        self.ui_logger.warn("Please wait for all images to finish loading before editing the manifest.");
+                    } else {
+                        Window::new("Edit Manifest")
+                            .open(&mut self.show_manifest_editor)
+                            .show(ctx, |ui| {
+                                let mut editor = ManifestEditor::new(&mut archive);
+                                if editor.ui(ui, ctx).is_err() {
+                                    self.ui_logger.error("Cannot edit Manifest");
+                                }
+                            });
+                    }
                 }
             }
         }

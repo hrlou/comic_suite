@@ -40,18 +40,16 @@ impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
 
         Ok(bytes.to_vec())
     }
-}
 
-impl<T: ManifestAware> ManifestAware for WebImageArchive<T> {
-    fn read_manifest(path: &Path) -> Result<Manifest, AppError> {
-        let manifest = T::read_manifest(path)?;
-        // manifest.meta.web_archive = true;
-        Ok(manifest)
+    fn read_manifest(&self) -> Result<Manifest, AppError> {
+        self.inner.read_manifest().or_else(|_| {
+            // If the inner archive doesn't have a manifest, return our own
+            Ok(self.manifest.clone())
+        })
     }
 
-    fn write_manifest(&self, path: &Path, manifest: &Manifest) -> Result<(), AppError> {
-        let patched = manifest.clone();
-        // patched.meta.web_archive = true;
-        self.inner.write_manifest(path, &patched)
+    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+        self.inner.write_manifest(manifest)?;
+        Ok(())
     }
 }

@@ -20,6 +20,8 @@ pub trait ImageArchiveTrait: Send + Sync {
     fn list_images(&self) -> Vec<String>;
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError>;
     // fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, AppError>;
+    fn read_manifest(&self) -> Result<Manifest, AppError>;
+    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,16 +48,15 @@ impl ImageArchive {
 
         match ext.as_str() {
             "cbz" | "zip" => {
-                let manifest = ZipImageArchive::read_manifest(path)?;
+                // let manifest = ZipImageArchive::read_manifest(path)?;
+                let zip_archive = ZipImageArchive::new(path)?;
+                let manifest = zip_archive.read_manifest().unwrap_or_default();
                 let is_web = manifest.meta.web_archive;
 
                 let backend: Box<dyn ImageArchiveTrait> = if is_web {
-                    Box::new(WebImageArchive::new(
-                        ZipImageArchive::new(path)?,
-                        manifest.clone(),
-                    ))
+                    Box::new(WebImageArchive::new(zip_archive, manifest.clone()))
                 } else {
-                    Box::new(ZipImageArchive::new(path)?)
+                    Box::new(zip_archive)
                 };
 
                 Ok(Self {
@@ -90,10 +91,6 @@ impl ImageArchive {
         }
     }
 
-    // pub fn manifest_mut_and_path(&mut self) -> (&mut Manifest, &Path) {
-        // (&mut self.manifest, self.path.as_path())
-    // }
-
     pub fn list_images(&self) -> Vec<String> {
         self.backend.list_images()
     }
@@ -109,5 +106,25 @@ impl ImageArchive {
         } else {
             Err(AppError::IndexOutOfBounds)
         }
+    }
+
+    pub fn as_trait_mut(&mut self) -> &mut dyn ImageArchiveTrait {
+        self.backend.as_mut()
+    }
+
+    pub fn manifest_mut(&mut self) -> &mut Manifest {
+        &mut self.manifest
+    }
+
+    pub fn read_manifest(&self) -> Result<Manifest, AppError> {
+        self.backend.read_manifest()
+    }
+
+    pub fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+        self.backend.write_manifest(manifest)
+    }
+
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
     }
 }
