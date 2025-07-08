@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 use zip::result::ZipError;
 
 #[derive(Debug, Error)]

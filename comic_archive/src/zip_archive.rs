@@ -2,7 +2,7 @@ use crate::error::ArchiveError;
 use crate::prelude::*;
 
 use std::fs::File;
-use std::io::{Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use zip::read::ZipArchive;
@@ -131,7 +131,9 @@ impl ImageArchiveTrait for ZipImageArchive {
                 .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
             Ok(manifest)
         } else {
-            Err(ArchiveError::ManifestError("Manifest not found".to_string()))
+            Err(ArchiveError::ManifestError(
+                "Manifest not found".to_string(),
+            ))
         }
     }
 

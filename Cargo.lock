@@ -895,13 +895,11 @@ version = "0.1.0"
 dependencies = [
  "image",
  "log",
- "lru",
  "reqwest",
  "serde",
  "tempfile",
  "thiserror 1.0.69",
  "toml 0.8.23",
- "which 8.0.0",
  "zip",
 ]
 
@@ -922,7 +920,6 @@ dependencies = [
  "lru",
  "mime_guess",
  "rfd",
- "serde",
  "tempfile",
  "thiserror 1.0.69",
  "toml 0.8.23",

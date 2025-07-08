@@ -133,7 +133,8 @@ impl ImageArchiveTrait for RarImageArchive {
             &self.path
         );
 
-        let tmp_dir = tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
+        let tmp_dir =
+            tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
         log::info!("Created temporary directory: {:?}", tmp_dir.path());
 
         log::info!("Running 'unrar' to extract manifest.toml...");
@@ -183,7 +184,8 @@ impl ImageArchiveTrait for RarImageArchive {
         );
 
         // Write manifest to a temp file
-        let tmp_dir = tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
+        let tmp_dir =
+            tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
         let manifest_path = tmp_dir.path().join("manifest.toml");
         log::info!(
             "Writing manifest TOML to temporary file: {:?}",

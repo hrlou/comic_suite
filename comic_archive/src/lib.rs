@@ -1,8 +1,8 @@
 //! Unified image archive interface for CBZ, folders, RAR, and web archives.
 
 pub mod error;
-pub mod prelude;
 pub mod model;
+pub mod prelude;
 
 mod zip_archive;
 pub use zip_archive::ZipImageArchive;
@@ -15,8 +15,8 @@ mod rar_archive;
 #[cfg(feature = "rar")]
 pub use rar_archive::RarImageArchive;
 
-use std::path::{Path, PathBuf};
 use image::codecs::jpeg::JpegEncoder;
+use std::path::{Path, PathBuf};
 
 use crate::prelude::*;
 
@@ -110,16 +110,17 @@ impl ImageArchive {
     /// A vector of JPEG bytes on success, or an `ArchiveError` on failure.
     pub fn generate_thumbnail(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let image_data = self.read_image_by_name(filename)?;
-        let img = image::load_from_memory(&image_data)
-            .map_err(|e| ArchiveError::ImageProcessingError(format!("Failed to load image: {}", e)))?;
+        let img = image::load_from_memory(&image_data).map_err(|e| {
+            ArchiveError::ImageProcessingError(format!("Failed to load image: {}", e))
+        })?;
 
         let thumbnail = img.resize(200, 200, image::imageops::FilterType::Lanczos3);
         let mut buffer = Vec::new();
         {
             let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 80);
-            encoder
-                .encode_image(&thumbnail)
-                .map_err(|e| ArchiveError::ImageProcessingError(format!("Failed to write thumbnail: {}", e)))?;
+            encoder.encode_image(&thumbnail).map_err(|e| {
+                ArchiveError::ImageProcessingError(format!("Failed to write thumbnail: {}", e))
+            })?;
         }
 
         Ok(buffer)

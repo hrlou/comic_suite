@@ -1,7 +1,7 @@
 //! Unified error type for the CBZ Viewer application.
 
-use thiserror::Error;
 use comic_archive::error::ArchiveError;
+use thiserror::Error;
 
 /// All errors that can occur in the application.
 #[derive(Debug, Error)]

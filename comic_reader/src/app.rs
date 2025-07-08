@@ -268,8 +268,6 @@ impl eframe::App for CBZViewerApp {
 
         self.update_window_title(ctx);
 
-        
-
         /*if let Some(archive) = self.archive.as_ref() {
             let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
             self.preload_images(archive);
@@ -292,8 +290,7 @@ impl eframe::App for CBZViewerApp {
                 self.preload_images(archive);
             }
         }
-            
-        
+
         if self.total_pages > 0 {
             self.display_main_full(ctx);
         } else {
