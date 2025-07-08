@@ -23,6 +23,7 @@ toml = "0.8.12"
 base64ct = "1.7.0"
 tempfile = "3.10.1"
 which = "8.0.0"
+webp-animation = { version = "0.9.0", optional = true }
 
 [build-dependencies]
 winres = "0.1.12"
@@ -43,3 +44,4 @@ path = "src/main.rs"
 default = []
 windows_gui = []
 rar = [ ]
+webp_animation = [ "webp-animation" ]

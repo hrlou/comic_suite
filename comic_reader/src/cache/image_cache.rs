@@ -1,12 +1,23 @@
 //! LRU cache for decoded images and async image loading.
 
 use crate::prelude::*;
+use std::io::Cursor;
+
+// Add this at the top of the file
+// Add to Cargo.toml: webp-animation = "0.1"
+#[cfg(feature = "webp_animation")]
+use webp_animation::Decoder as WebpAnimDecoder;
 
 /// Represents a decoded page image (static or animated).
 #[derive(Clone)]
 pub enum PageImage {
     Static(DynamicImage),
     AnimatedGif {
+        frames: Vec<eframe::egui::ColorImage>,
+        delays: Vec<u16>,
+        start_time: Instant,
+    },
+    AnimatedWebP {
         frames: Vec<eframe::egui::ColorImage>,
         delays: Vec<u16>,
         start_time: Instant,
@@ -18,7 +29,8 @@ impl PageImage {
     pub fn dimensions(&self) -> (u32, u32) {
         match self {
             PageImage::Static(img) => img.dimensions(),
-            PageImage::AnimatedGif { frames, .. } => {
+            PageImage::AnimatedGif { frames, .. }
+            | PageImage::AnimatedWebP { frames, .. } => {
                 if let Some(frame) = frames.first() {
                     (frame.size[0] as u32, frame.size[1] as u32)
                 } else {
@@ -43,6 +55,35 @@ pub type SharedImageCache = Arc<Mutex<LruCache<usize, LoadedPage>>>;
 /// Create a new shared LRU cache for images.
 pub fn new_image_cache(size: usize) -> SharedImageCache {
     Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(size).unwrap())))
+}
+
+/// Try to decode animated WebP using webp-animation crate.
+/// Returns (frames, delays) if animated, or None if not animated or not supported.
+#[cfg(feature = "webp_animation")]
+fn try_decode_animated_webp(buf: &[u8]) -> Option<(Vec<eframe::egui::ColorImage>, Vec<u16>)> {
+    let mut decoder = WebpAnimDecoder::new(buf).ok()?;
+    let mut frames = Vec::new();
+    let mut delays = Vec::new();
+    for frame in decoder {
+        let delay = frame.timestamp() as u16; // ms
+        delays.push(delay);
+        let (width, height) = frame.dimensions();
+        let img = image::RgbaImage::from_raw(
+            width,
+            height,
+            frame.data().to_vec(),
+        )?;
+        let color_image = eframe::egui::ColorImage::from_rgba_unmultiplied(
+            [img.width() as usize, img.height() as usize],
+            img.as_raw(),
+        );
+        frames.push(color_image);
+    }
+    if frames.len() > 1 {
+        Some((frames, delays))
+    } else {
+        None
+    }
 }
 
 /// Asynchronously load an image from the archive and insert into the cache.
@@ -108,6 +149,28 @@ pub fn load_image_async(
                 frames: egui_frames,
                 delays,
                 start_time: Instant::now(),
+            }
+        } else if filename.to_lowercase().ends_with(".webp") {
+            // Try animated WebP decode (feature-gated)
+            #[cfg(feature = "webp_animation")]
+            {
+                if let Some((frames, delays)) = try_decode_animated_webp(&buf) {
+                    PageImage::AnimatedWebP {
+                        frames,
+                        delays,
+                        start_time: Instant::now(),
+                    }
+                } else {
+                    // Fallback to static decode
+                    let img = image::load_from_memory(&buf).unwrap();
+                    PageImage::Static(img)
+                }
+            }
+            #[cfg(not(feature = "webp_animation"))]
+            {
+                // Fallback to static decode
+                let img = image::load_from_memory(&buf).unwrap();
+                PageImage::Static(img)
             }
         } else {
             // Static image fallback
