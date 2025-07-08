@@ -42,7 +42,7 @@ impl CBZViewerApp {
     pub fn display_manifest_editor(&mut self, ctx: &egui::Context) {
         if let Some(archive_mutex) = &self.archive {
             if let Ok(mut archive) = archive_mutex.lock() {
-                if !self.loading_pages.lock().unwrap().is_empty() {
+                if !self.loading_pages.lock().unwrap().is_empty() && self.total_pages > 0 {
                     self.ui_logger.warn(
                         "Please wait for all images to finish loading before editing the manifest.",
                     );

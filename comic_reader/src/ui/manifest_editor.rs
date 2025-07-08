@@ -1,5 +1,58 @@
 use crate::prelude::*;
 
+macro_rules! editable_list {
+    ($ui:expr, $label:expr, $vec:expr, $hint:expr, $do_add:expr, $reorder:expr) => {{
+        let mut to_remove = None;
+        let mut to_move_up = None;
+        let mut to_move_down = None;
+
+        $ui.separator();
+        $ui.label($label);
+
+        for i in 0..$vec.len() {
+            $ui.horizontal(|ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut $vec[i])
+                        .hint_text($hint)
+                        .desired_width(ui.available_width() - 180.0),
+                );
+                if $reorder {
+                    if ui.button("↑").clicked() && i > 0 {
+                        to_move_up = Some(i);
+                    }
+                    if ui.button("↓").clicked() && i + 1 < $vec.len() {
+                        to_move_down = Some(i);
+                    }   
+                }
+                if ui.button("✕").clicked() {
+                    to_remove = Some(i);
+                }
+            });
+        }
+
+        if let Some(i) = to_move_up {
+            $vec.swap(i, i - 1);
+        }
+        if let Some(i) = to_move_down {
+            $vec.swap(i, i + 1);
+        }
+        if let Some(i) = to_remove {
+            $vec.remove(i);
+        }
+
+        $ui.horizontal(|ui| {
+            if $do_add {
+                if ui.button(format!("+ Add {}", $label)).clicked() {
+                    $vec.push(String::new());
+                }
+            }
+            if ui.button("Clear All").clicked() {
+                $vec.clear();
+            }
+        });
+    }};
+}
+
 pub struct ManifestEditor<'a> {
     archive: &'a mut ImageArchive,
 }
@@ -10,7 +63,6 @@ impl<'a> ManifestEditor<'a> {
     }
 
     pub fn ui(&mut self, ui: &mut Ui, _ctx: &Context) -> Result<(), AppError> {
-        // Scope the mutable borrow of manifest
         let mut manifest = self.archive.manifest.clone();
         {
             ui.label("Title:");
@@ -21,56 +73,37 @@ impl<'a> ManifestEditor<'a> {
 
             ui.checkbox(&mut manifest.meta.web_archive, "Web Archive");
 
+            let mut num_pages = self.archive.list_images().len();
+
+            // External Page URLs
             if manifest.meta.web_archive {
+                num_pages = manifest
+                    .external_pages
+                    .as_ref()
+                    .map(|e| e.urls.len())
+                    .unwrap_or(0);
+
                 let urls = manifest
                     .external_pages
                     .get_or_insert_with(ExternalPages::default);
-
-                ui.separator();
-                ui.label("External Page URLs:");
-
-                let mut to_remove = None;
-                let mut to_move_up = None;
-                let mut to_move_down = None;
-
-                for i in 0..urls.urls.len() {
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::TextEdit::singleline(&mut urls.urls[i])
-                                .desired_width(ui.available_width() - 120.0),
-                        );
-                        if ui.button("↑").clicked() && i > 0 {
-                            to_move_up = Some(i);
-                        }
-                        if ui.button("↓").clicked() && i + 1 < urls.urls.len() {
-                            to_move_down = Some(i);
-                        }
-                        if ui.button("✕").clicked() {
-                            to_remove = Some(i);
-                        }
-                    });
-                }
-
-                if let Some(i) = to_move_up {
-                    urls.urls.swap(i, i - 1);
-                }
-                if let Some(i) = to_move_down {
-                    urls.urls.swap(i, i + 1);
-                }
-                if let Some(i) = to_remove {
-                    urls.urls.remove(i);
-                }
-
-                ui.horizontal(|ui| {
-                    if ui.button("+ Add Page").clicked() {
-                        urls.urls.push(String::new());
-                    }
-                    if ui.button("Clear All").clicked() {
-                        urls.urls.clear();
-                    }
-                });
+                editable_list!(ui, "External Page URLs", urls.urls, "URL", true, true);
             }
-        } // <-- mutable borrow of manifest ends here
+
+            if num_pages > 0 {
+                if manifest.meta.comments.is_none() {
+                    manifest.meta.comments = Some(vec![String::new(); num_pages]);
+                }
+                if let Some(comments) = manifest.meta.comments.as_mut() {
+                    // Ensure comments vector matches urls vector length
+                    if comments.len() < num_pages {
+                        comments.resize(num_pages, String::new());
+                    } else if comments.len() > num_pages {
+                        comments.truncate(num_pages);
+                    }
+                    editable_list!(ui, "Page Comments", comments, "Comment", false, false);
+                }
+            }
+        }
 
         ui.separator();
 

@@ -30,35 +30,20 @@ macro_rules! archive_case {
     (
         $archive_ty:ty, $path:expr
     ) => {{
-        let mut archive = <$archive_ty>::new($path)?;
-        let manifest_result = archive.read_manifest_string();
-        let (manifest, upgraded) = match manifest_result {
+        let archive = <$archive_ty>::new($path)?;
+        // Always try to read the manifest TOML string and upgrade if needed
+        let manifest = match archive.read_manifest_string() {
             Ok(manifest_str) => {
                 match $crate::model::Manifest::upgrade_from_v0_to_v1(&manifest_str) {
-                    Ok(upgraded_manifest) => {
-                        // If the manifest was upgraded (version was 0), persist it
-                        let needs_upgrade = upgraded_manifest.version > 0 &&
-                            toml::from_str::<$crate::model::Manifest>(&manifest_str)
-                                .map(|m| m.version == 0)
-                                .unwrap_or(true);
-                        (upgraded_manifest, needs_upgrade)
-                    }
+                    Ok(upgraded) => upgraded,
                     Err(_) => {
                         // Fallback: try parsing as Manifest directly
-                        let fallback = toml::from_str(&manifest_str)
-                            .unwrap_or_else(|_| Manifest::default());
-                        (fallback, false)
+                        toml::from_str(&manifest_str).unwrap_or_else(|_| Manifest::default())
                     }
                 }
             }
-            Err(_) => (Manifest::default(), false),
+            Err(_) => Manifest::default(),
         };
-
-        // If upgraded, write the new manifest back to the archive
-        if upgraded {
-            let _ = archive.write_manifest(&manifest);
-        }
-
         let is_web = manifest.meta.web_archive;
 
         let backend: Box<dyn ImageArchiveTrait> = if is_web {
@@ -74,7 +59,6 @@ macro_rules! archive_case {
         })
     }};
 }
-
 /// Trait for all comic archive backends.
 ///
 /// Implementors provide methods for listing images, reading images by name,
