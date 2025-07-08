@@ -185,7 +185,7 @@ impl CBZViewerApp {
         }
     }
 
-    pub fn preload_images(&mut self, archive: Arc<Mutex<ImageArchive>>) {
+    pub fn preload_images(&mut self, ctx: &egui::Context, archive: Arc<Mutex<ImageArchive>>) {
         let filenames = self.filenames.clone().unwrap_or_default();
 
         // Preload images for current view and next pages
@@ -203,7 +203,7 @@ impl CBZViewerApp {
                 archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
-            );
+                ctx.clone());
         }
     }
 
@@ -287,7 +287,7 @@ impl eframe::App for CBZViewerApp {
         } else {
             if let Some(archive) = self.archive.as_ref() {
                 let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
-                self.preload_images(archive);
+                self.preload_images(ctx, archive);
             }
         }
 

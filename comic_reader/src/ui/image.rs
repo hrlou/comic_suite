@@ -52,6 +52,43 @@ macro_rules! draw_static {
     }};
 }
 
+/// Macro to generate animation frame drawing for GIF and WebP
+macro_rules! draw_anim_at_rect {
+    ($variant:ident, $ui:expr, $loaded:expr, $rect:expr) => {
+        if let PageImage::$variant { frames, delays, start_time } = &$loaded.image {
+            if frames.is_empty() {
+                warn!(concat!(stringify!($variant), " has no frames: {}"), $loaded.filename);
+                return;
+            }
+
+            // Compute which frame to show based on elapsed time and per-frame delays
+            let elapsed = start_time.elapsed().as_millis() as u64;
+            let total_duration: u64 = delays.iter().map(|d| *d as u64).sum();
+            let t = elapsed % total_duration;
+
+            let mut acc = 0u64;
+            let mut idx = 0;
+            for (i, delay) in delays.iter().enumerate() {
+                let frame_time = *delay as u64;
+                if t < acc + frame_time {
+                    idx = i;
+                    break;
+                }
+                acc += frame_time;
+            }
+
+            let handle = &frames[idx];
+            let builder = egui::UiBuilder::default().max_rect($rect);
+            $ui.allocate_new_ui(builder, |ui| {
+                ui.add(Image::from_texture(handle).fit_to_exact_size($rect.size()));
+            });
+
+            // Request repaint for smooth animation
+            $ui.ctx().request_repaint();
+        }
+    };
+}
+
 /// Macro to handle dual page drawing logic, including GIF/static/animated WebP dispatch.
 macro_rules! draw_page_at_rect {
     ($ui:expr, $loaded:expr, $rect:expr, $disp_size:expr, $handle:expr, $cache:expr, $zoom:expr, $pan:expr) => {
@@ -135,11 +172,13 @@ pub fn draw_dual_page(
                 Some((disp_size, handle))
             }
             PageImage::AnimatedGif { frames, .. } if !frames.is_empty() => {
-                let (w, h) = (frames[0].size[0] as u32, frames[0].size[1] as u32);
+                let [w, h] = frames[0].size();
+                let (w, h) = (w as u32, h as u32);
                 Some((Vec2::new(w as f32 * zoom, h as f32 * zoom), None))
             }
             PageImage::AnimatedWebP { frames, .. } if !frames.is_empty() => {
-                let (w, h) = (frames[0].size[0] as u32, frames[0].size[1] as u32);
+                let size = frames[0].size();
+                let (w, h) = (size[0] as u32, size[1] as u32);
                 Some((Vec2::new(w as f32 * zoom, h as f32 * zoom), None))
             }
             _ => None,
@@ -246,7 +285,7 @@ pub fn draw_gif(
             warn!("GIF has no frames: {}", loaded.filename);
             return;
         }
-        (frames[0].size[0] as f32, frames[0].size[1] as f32)
+        (frames[0].size()[0] as f32, frames[0].size()[1] as f32)
     } else {
         warn!("draw_gif called on non-gif image");
         return;
@@ -258,66 +297,16 @@ pub fn draw_gif(
     draw_gif_at_rect(ui, loaded, rect, zoom, pan, cache);
 }
 
-/// Draw a GIF at the specified rect, using the texture cache to avoid reloads.
-/// Handles frame timing and texture management for animated playback.
+/// Draw a GIF at the specified rect, using the macro for animation.
 pub fn draw_gif_at_rect(
     ui: &mut Ui,
     loaded: &LoadedPage,
     rect: Rect,
     _zoom: f32,
     _pan: Vec2,
-    cache: &mut TextureCache,
+    _cache: &mut TextureCache,
 ) {
-    if let PageImage::AnimatedGif {
-        frames,
-        delays,
-        start_time,
-    } = &loaded.image
-    {
-        if frames.is_empty() {
-            warn!("GIF has no frames: {}", loaded.filename);
-            return;
-        }
-
-        // Compute which frame to show based on elapsed time and per-frame delays
-        let elapsed = start_time.elapsed().as_millis() as u64;
-        let total_duration: u64 = delays.iter().map(|d| *d as u64).sum();
-        let t = elapsed % total_duration;
-
-        let mut acc = 0u64;
-        let mut idx = 0;
-        for (i, delay) in delays.iter().enumerate() {
-            let frame_time = *delay as u64;
-            if t < acc + frame_time {
-                idx = i;
-                break;
-            }
-            acc += frame_time;
-        }
-
-        let ctx = ui.ctx().clone();
-        let key = format!("gif{}_{}", loaded.index, idx);
-
-        let handle = if let Some(handle) = cache.get_animated(&key) {
-            handle.clone()
-        } else {
-            let new_handle = ctx.load_texture(
-                key.clone(),
-                frames[idx].clone(),
-                egui::TextureOptions::default(),
-            );
-            cache.set_animated(key, new_handle.clone());
-            new_handle
-        };
-
-        let builder = egui::UiBuilder::default().max_rect(rect);
-        ui.allocate_new_ui(builder, |ui| {
-            ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
-        });
-
-        // Request repaint for smooth animation
-        ui.ctx().request_repaint();
-    }
+    draw_anim_at_rect!(AnimatedGif, ui, loaded, rect);
 }
 
 /// Draw an animated WebP in the given area by forwarding to `draw_webp_anim_at_rect`.
@@ -334,7 +323,7 @@ pub fn draw_webp_anim(
             warn!("WebP animation has no frames: {}", loaded.filename);
             return;
         }
-        (frames[0].size[0] as f32, frames[0].size[1] as f32)
+        (frames[0].size()[0] as f32, frames[0].size()[1] as f32)
     } else {
         warn!("draw_webp_anim called on non-animated-webp image");
         return;
@@ -346,66 +335,16 @@ pub fn draw_webp_anim(
     draw_webp_anim_at_rect(ui, loaded, rect, zoom, pan, cache);
 }
 
-/// Draw an animated WebP at the specified rect, using the texture cache to avoid reloads.
-/// Handles frame timing and texture management for animated playback.
+/// Draw an animated WebP at the specified rect, using the macro for animation.
 pub fn draw_webp_anim_at_rect(
     ui: &mut Ui,
     loaded: &LoadedPage,
     rect: Rect,
     _zoom: f32,
     _pan: Vec2,
-    cache: &mut TextureCache,
+    _cache: &mut TextureCache,
 ) {
-    if let PageImage::AnimatedWebP {
-        frames,
-        delays,
-        start_time,
-    } = &loaded.image
-    {
-        if frames.is_empty() {
-            warn!("WebP animation has no frames: {}", loaded.filename);
-            return;
-        }
-
-        // Compute which frame to show based on elapsed time and per-frame delays
-        let elapsed = start_time.elapsed().as_millis() as u64;
-        let total_duration: u64 = delays.iter().map(|d| *d as u64).sum();
-        let t = elapsed % total_duration;
-
-        let mut acc = 0u64;
-        let mut idx = 0;
-        for (i, delay) in delays.iter().enumerate() {
-            let frame_time = *delay as u64;
-            if t < acc + frame_time {
-                idx = i;
-                break;
-            }
-            acc += frame_time;
-        }
-
-        let ctx = ui.ctx().clone();
-        let key = format!("webp{}_{}", loaded.index, idx);
-
-        let handle = if let Some(handle) = cache.get_animated(&key) {
-            handle.clone()
-        } else {
-            let new_handle = ctx.load_texture(
-                key.clone(),
-                frames[idx].clone(),
-                egui::TextureOptions::default(),
-            );
-            cache.set_animated(key, new_handle.clone());
-            new_handle
-        };
-
-        let builder = egui::UiBuilder::default().max_rect(rect);
-        ui.allocate_new_ui(builder, |ui| {
-            ui.add(Image::from_texture(&handle).fit_to_exact_size(rect.size()));
-        });
-
-        // Request repaint for smooth animation
-        ui.ctx().request_repaint();
-    }
+    draw_anim_at_rect!(AnimatedWebP, ui, loaded, rect);
 }
 
 /// Clamp the pan offset so the image stays within the viewport bounds.

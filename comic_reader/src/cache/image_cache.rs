@@ -3,8 +3,6 @@
 use crate::prelude::*;
 use std::io::Cursor;
 
-// Add this at the top of the file
-// Add to Cargo.toml: webp-animation = "0.1"
 #[cfg(feature = "webp_animation")]
 use webp_animation::Decoder as WebpAnimDecoder;
 
@@ -13,12 +11,12 @@ use webp_animation::Decoder as WebpAnimDecoder;
 pub enum PageImage {
     Static(DynamicImage),
     AnimatedGif {
-        frames: Vec<eframe::egui::ColorImage>,
+        frames: Vec<egui::TextureHandle>,
         delays: Vec<u16>,
         start_time: Instant,
     },
     AnimatedWebP {
-        frames: Vec<eframe::egui::ColorImage>,
+        frames: Vec<egui::TextureHandle>,
         delays: Vec<u16>,
         start_time: Instant,
     },
@@ -32,7 +30,7 @@ impl PageImage {
             PageImage::AnimatedGif { frames, .. }
             | PageImage::AnimatedWebP { frames, .. } => {
                 if let Some(frame) = frames.first() {
-                    (frame.size[0] as u32, frame.size[1] as u32)
+                    (frame.size()[0] as u32, frame.size()[1] as u32)
                 } else {
                     (0, 0)
                 }
@@ -57,30 +55,72 @@ pub fn new_image_cache(size: usize) -> SharedImageCache {
     Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(size).unwrap())))
 }
 
-/// Try to decode animated WebP using webp-animation crate.
-/// Returns (frames, delays) if animated, or None if not animated or not supported.
+// Macro to extract frames and delays and upload as egui textures
+macro_rules! extract_animation_frames {
+    ($frames:expr, $delays:expr, $ctx:expr) => {{
+        let mut textures = Vec::with_capacity($frames.len());
+        for (i, color_image) in $frames.into_iter().enumerate() {
+            let handle = $ctx.load_texture(
+                format!("anim_frame_{}", i),
+                color_image,
+                egui::TextureOptions::default(),
+            );
+            textures.push(handle);
+        }
+        (textures, $delays)
+    }};
+}
+
 #[cfg(feature = "webp_animation")]
-fn try_decode_animated_webp(buf: &[u8]) -> Option<(Vec<eframe::egui::ColorImage>, Vec<u16>)> {
+fn try_decode_animated_webp(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui::TextureHandle>, Vec<u16>)> {
     let mut decoder = WebpAnimDecoder::new(buf).ok()?;
     let mut frames = Vec::new();
     let mut delays = Vec::new();
     for frame in decoder {
+        use std::hash;
+
         let delay = frame.timestamp() as u16; // ms
-        delays.push(delay);
         let (width, height) = frame.dimensions();
+        delays.push(delay);
         let img = image::RgbaImage::from_raw(
-            width,
-            height,
+            width, height,
             frame.data().to_vec(),
         )?;
-        let color_image = eframe::egui::ColorImage::from_rgba_unmultiplied(
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(
             [img.width() as usize, img.height() as usize],
             img.as_raw(),
         );
         frames.push(color_image);
     }
     if frames.len() > 1 {
-        Some((frames, delays))
+        let (textures, delays) = extract_animation_frames!(frames, delays, ctx);
+        Some((textures, delays))
+    } else {
+        None
+    }
+}
+
+fn decode_gif(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui::TextureHandle>, Vec<u16>)> {
+    let cursor = Cursor::new(buf);
+    let decoder = GifDecoder::new(cursor).ok()?;
+    let frames = decoder.into_frames().collect::<Result<Vec<_>, _>>().ok()?;
+
+    let mut color_frames = Vec::with_capacity(frames.len());
+    let mut delays = Vec::with_capacity(frames.len());
+
+    for frame in frames {
+        let delay = frame.delay().numer_denom_ms().0; // delay numerator (ms)
+        delays.push(delay as u16);
+        let buffer = frame.buffer();
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(
+            [buffer.width() as usize, buffer.height() as usize],
+            buffer.as_raw(),
+        );
+        color_frames.push(color_image);
+    }
+    if color_frames.len() > 1 {
+        let (textures, delays) = extract_animation_frames!(color_frames, delays, ctx);
+        Some((textures, delays))
     } else {
         None
     }
@@ -93,6 +133,7 @@ pub fn load_image_async(
     archive: Arc<Mutex<ImageArchive>>,
     image_lru: SharedImageCache,
     loading_pages: Arc<Mutex<std::collections::HashSet<usize>>>,
+    ctx: egui::Context,
 ) -> Result<(), AppError> {
     {
         let mut loading = loading_pages.lock().unwrap();
@@ -113,6 +154,7 @@ pub fn load_image_async(
     let archive = archive.clone();
     let image_lru = image_lru.clone();
     let loading_pages = loading_pages.clone();
+    let ctx = ctx.clone();
 
     std::thread::spawn(move || {
         let filename = &filenames[page];
@@ -120,60 +162,36 @@ pub fn load_image_async(
         let buf = archive.read_image_by_index(page).unwrap();
 
         let loaded_page = if filename.to_lowercase().ends_with(".gif") {
-            // Decode GIF frames
-            let cursor = Cursor::new(&buf);
-            let decoder = GifDecoder::new(cursor).unwrap();
-            let frames = decoder
-                .into_frames()
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
-
-            // Convert frames to egui::ColorImage and collect delays
-            let mut egui_frames = Vec::with_capacity(frames.len());
-            let mut delays = Vec::with_capacity(frames.len());
-
-            for frame in frames {
-                let delay = frame.delay().numer_denom_ms().0; // delay numerator (ms)
-                delays.push(delay as u16);
-
-                // Convert the frame to RGBA8 for egui
-                let buffer = frame.buffer();
-                let color_image = egui::ColorImage::from_rgba_unmultiplied(
-                    [buffer.width() as usize, buffer.height() as usize],
-                    buffer.as_raw(),
-                );
-                egui_frames.push(color_image);
-            }
-
-            PageImage::AnimatedGif {
-                frames: egui_frames,
-                delays,
-                start_time: Instant::now(),
+            if let Some((frames, delays)) = decode_gif(&buf, &ctx) {
+                PageImage::AnimatedGif {
+                    frames,
+                    delays,
+                    start_time: Instant::now(),
+                }
+            } else {
+                let img = image::load_from_memory(&buf).unwrap();
+                PageImage::Static(img)
             }
         } else if filename.to_lowercase().ends_with(".webp") {
-            // Try animated WebP decode (feature-gated)
             #[cfg(feature = "webp_animation")]
             {
-                if let Some((frames, delays)) = try_decode_animated_webp(&buf) {
+                if let Some((frames, delays)) = try_decode_animated_webp(&buf, &ctx) {
                     PageImage::AnimatedWebP {
                         frames,
                         delays,
                         start_time: Instant::now(),
                     }
                 } else {
-                    // Fallback to static decode
                     let img = image::load_from_memory(&buf).unwrap();
                     PageImage::Static(img)
                 }
             }
             #[cfg(not(feature = "webp_animation"))]
             {
-                // Fallback to static decode
                 let img = image::load_from_memory(&buf).unwrap();
                 PageImage::Static(img)
             }
         } else {
-            // Static image fallback
             let img = image::load_from_memory(&buf).unwrap();
             PageImage::Static(img)
         };
