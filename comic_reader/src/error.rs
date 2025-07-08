@@ -1,6 +1,7 @@
 //! Unified error type for the CBZ Viewer application.
 
 use thiserror::Error;
+use comic_archive::error::ArchiveError;
 
 /// All errors that can occur in the application.
 #[derive(Debug, Error)]
@@ -25,6 +26,21 @@ pub enum AppError {
     UnsupportedArchive,
     #[error("Network error: {0}")]
     NetworkError(String),
-    // #[error("Other error: {0}")]
-    // Other(String),
+    #[error("Other error: {0}")]
+    Other(String),
+}
+
+impl From<ArchiveError> for AppError {
+    fn from(err: ArchiveError) -> Self {
+        match err {
+            ArchiveError::UnsupportedArchive => AppError::UnsupportedArchive,
+            ArchiveError::NoImages => AppError::NoImages,
+            ArchiveError::IndexOutOfBounds => AppError::IndexOutOfBounds,
+            ArchiveError::ManifestError(e) => AppError::ManifestError(e),
+            ArchiveError::NetworkError(e) => AppError::NetworkError(e),
+            ArchiveError::Io(e) => AppError::Io(e),
+            ArchiveError::Other(e) => AppError::Other(e),
+            ArchiveError::Zip(e) => AppError::Zip(e),
+        }
+    }
 }

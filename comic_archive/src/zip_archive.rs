@@ -1,20 +1,26 @@
-use crate::archive::image_archive::{ImageArchiveTrait, Manifest};
-use crate::error::AppError;
-
+use crate::error::ArchiveError;
 use crate::prelude::*;
+
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+use zip::read::ZipArchive;
+
+use toml;
 
 pub struct ZipImageArchive {
     path: PathBuf,
 }
 
 impl ZipImageArchive {
-    pub fn new(path: &Path) -> Result<Self, AppError> {
+    pub fn new(path: &Path) -> Result<Self, ArchiveError> {
         Ok(Self {
             path: path.to_path_buf(),
         })
     }
 
-    pub fn create_from_path(path: &Path) -> Result<(), AppError> {
+    pub fn create_from_path(path: &Path) -> Result<(), ArchiveError> {
         use std::io::Write;
         use zip::{ZipWriter, write::FileOptions};
 
@@ -29,7 +35,7 @@ impl ZipImageArchive {
         manifest.meta.web_archive = true;
 
         let manifest_str = toml::to_string_pretty(&manifest)
-            .map_err(|e| AppError::ManifestError(format!("Couldn't serialize: {}", e)))?;
+            .map_err(|e| ArchiveError::ManifestError(format!("Couldn't serialize: {}", e)))?;
 
         zip.start_file("manifest.toml", options)?;
         zip.write_all(manifest_str.as_bytes())?;
@@ -68,7 +74,7 @@ impl ImageArchiveTrait for ZipImageArchive {
         images
     }
 
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError> {
+    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let file = File::open(&self.path)?;
         let mut zip = ZipArchive::new(file)?;
         let mut file = zip.by_name(filename)?;
@@ -77,7 +83,7 @@ impl ImageArchiveTrait for ZipImageArchive {
         Ok(buf)
     }
 
-    fn read_manifest(&self) -> Result<Manifest, AppError> {
+    fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
         let file = File::open(&self.path)?;
         let mut zip = ZipArchive::new(file)?;
 
@@ -86,64 +92,14 @@ impl ImageArchiveTrait for ZipImageArchive {
             let mut contents = String::new();
             manifest_file.read_to_string(&mut contents)?;
             let manifest: Manifest = toml::from_str(&contents)
-                .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
+                .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
             Ok(manifest)
         } else {
-            Err(AppError::ManifestError("Manifest not found".to_string()))
+            Err(ArchiveError::ManifestError("Manifest not found".to_string()))
         }
     }
 
-    // fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
-    //     use std::io::Write;
-    //     use zip::{ZipWriter, write::FileOptions};
-
-    //     let file = File::open(&self.path)?;
-    //     let mut zip = ZipArchive::new(file)?;
-
-    //     // Create a temporary output file next to original
-    //     let temp_path = self.path.with_extension("rebuild.tmp.zip");
-    //     let mut temp_file = tempfile::NamedTempFile::new_in(
-    //         self.path
-    //             .parent()
-    //             .unwrap_or_else(|| std::path::Path::new(".")),
-    //     )?;
-    //     {
-    //         let mut writer = ZipWriter::new(&mut temp_file);
-    //         let options = zip::write::FileOptions::default()
-    //             .compression_method(zip::CompressionMethod::Stored);
-
-    //         // Copy existing entries, skipping manifest.toml
-    //         for i in 0..zip.len() {
-    //             let mut file = zip.by_index(i)?;
-    //             let name = file.name().to_string();
-
-    //             if name == "manifest.toml" {
-    //                 continue;
-    //             }
-
-    //             writer.start_file(name, options)?;
-    //             std::io::copy(&mut file, &mut writer)?;
-    //         }
-
-    //         // Write new manifest.toml
-    //         writer.start_file("manifest.toml", options)?;
-    //         let toml = toml::to_string_pretty(manifest)
-    //             .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
-    //         writer.write_all(toml.as_bytes())?;
-    //         writer.finish()?;
-    //     }
-
-    //     // Persist the temp file to the target path
-    //     temp_file
-    //         .into_temp_path()
-    //         .persist(&self.path)
-    //         .map_err(|_| {
-    //             AppError::ManifestError("Failed to persist temporary manifest file".to_string())
-    //         })?;
-
-    //     Ok(())
-    // }
-    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError> {
         use std::fs::{File, remove_file, rename};
         use std::io::Write;
         use zip::{ZipWriter, write::FileOptions};
@@ -183,7 +139,7 @@ impl ImageArchiveTrait for ZipImageArchive {
             log::info!("Writing new manifest.toml");
             writer.start_file("manifest.toml", options)?;
             let toml = toml::to_string_pretty(manifest)
-                .map_err(|e| AppError::ManifestError(format!("Invalid TOML: {}", e)))?;
+                .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
             writer.write_all(toml.as_bytes())?;
             writer.finish()?;
             log::info!("Finished writing new manifest.toml");
@@ -196,14 +152,14 @@ impl ImageArchiveTrait for ZipImageArchive {
         log::info!("Removing original file {:?}", &self.path);
         remove_file(&self.path).map_err(|e| {
             log::error!("Failed to remove original file: {}", e);
-            AppError::ManifestError(format!("Failed to remove original file: {}", e))
+            ArchiveError::ManifestError(format!("Failed to remove original file: {}", e))
         })?;
 
         // Rename temp file to original path
         log::info!("Renaming {:?} to {:?}", temp_path, &self.path);
         rename(&temp_path, &self.path).map_err(|e| {
             log::error!("Failed to rename temp file: {}", e);
-            AppError::ManifestError(format!("Failed to rename temp file: {}", e))
+            ArchiveError::ManifestError(format!("Failed to rename temp file: {}", e))
         })?;
 
         log::info!("Manifest successfully written to {:?}", &self.path);

@@ -1,7 +1,7 @@
 //! Main application state and logic.
 
 use crate::{
-    archive::{self, ZipImageArchive},
+    // archive::{self, ZipImageArchive},
     prelude::*,
 };
 

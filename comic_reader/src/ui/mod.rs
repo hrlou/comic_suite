@@ -9,6 +9,7 @@ pub mod modules;
 pub use image::*;
 // pub use layout::*;
 pub use log::*;
+pub mod manifest_editor;
 
 use crate::prelude::*;
 

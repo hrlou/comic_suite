@@ -1,5 +1,9 @@
 //! Unified image archive interface for CBZ, folders, RAR, and web archives.
 
+pub mod error;
+pub mod prelude;
+pub mod model;
+
 mod zip_archive;
 pub use zip_archive::ZipImageArchive;
 
@@ -11,9 +15,9 @@ mod rar_archive;
 #[cfg(feature = "rar")]
 pub use rar_archive::RarImageArchive;
 
-// pub mod manifest;
-
+use std::path::{Path, PathBuf};
 use crate::prelude::*;
+
 
 #[macro_export]
 macro_rules! archive_case {
@@ -41,28 +45,20 @@ macro_rules! archive_case {
 /// Common image archive interface
 pub trait ImageArchiveTrait: Send + Sync {
     fn list_images(&self) -> Vec<String>;
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError>;
-    // fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, AppError>;
-    fn read_manifest(&self) -> Result<Manifest, AppError>;
-    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError>;
+    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError>;
+    fn read_manifest(&self) -> Result<Manifest, ArchiveError>;
+    fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError>;
 }
-
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum ImageArchiveType {
-// Zip,
-// Rar,
-// }
 
 /// The main image archive abstraction
 pub struct ImageArchive {
     pub path: PathBuf,
     pub manifest: Manifest,
     pub backend: Box<dyn ImageArchiveTrait>,
-    // pub kind: ImageArchiveType,
 }
 
 impl ImageArchive {
-    pub fn process(path: &Path) -> Result<Self, AppError> {
+    pub fn process(path: &Path) -> Result<Self, ArchiveError> {
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
@@ -73,16 +69,7 @@ impl ImageArchive {
             "cbz" | "zip" => archive_case!(ZipImageArchive, path),
             #[cfg(feature = "rar")]
             "cbr" | "rar" => archive_case!(RarImageArchive, path),
-            // _ if path.is_dir() => {
-            //     let backend = Box::new(crate::image_archive::folder_archive::FolderImageArchive::new(path)?);
-            //     Ok(Self {
-            //         path: path.to_path_buf(),
-            //         manifest: Manifest::default(),
-            //         is_web_archive: false,
-            //         backend,
-            //     })
-            // }
-            _ => Err(AppError::UnsupportedArchive),
+            _ => Err(ArchiveError::UnsupportedArchive),
         }
     }
 
@@ -90,16 +77,16 @@ impl ImageArchive {
         self.backend.list_images()
     }
 
-    pub fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, AppError> {
+    pub fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         self.backend.read_image_by_name(filename)
     }
 
-    pub fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, AppError> {
+    pub fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, ArchiveError> {
         let filenames = self.list_images();
         if index < filenames.len() {
             self.read_image_by_name(&filenames[index])
         } else {
-            Err(AppError::IndexOutOfBounds)
+            Err(ArchiveError::IndexOutOfBounds)
         }
     }
 
@@ -111,11 +98,11 @@ impl ImageArchive {
         &mut self.manifest
     }
 
-    pub fn read_manifest(&self) -> Result<Manifest, AppError> {
+    pub fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
         self.backend.read_manifest()
     }
 
-    pub fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), AppError> {
+    pub fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError> {
         self.backend.write_manifest(manifest)
     }
 

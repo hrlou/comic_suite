@@ -1,7 +1,6 @@
 // use crate::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub mod editor;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Metadata {

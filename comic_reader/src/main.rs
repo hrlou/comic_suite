@@ -2,12 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-mod archive;
 mod cache;
 mod config;
 mod error;
 mod macros;
-mod model;
 mod prelude;
 mod ui;
 
