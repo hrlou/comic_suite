@@ -30,8 +30,35 @@ macro_rules! archive_case {
     (
         $archive_ty:ty, $path:expr
     ) => {{
-        let archive = <$archive_ty>::new($path)?;
-        let manifest = archive.read_manifest().unwrap_or_default();
+        let mut archive = <$archive_ty>::new($path)?;
+        let manifest_result = archive.read_manifest_string();
+        let (manifest, upgraded) = match manifest_result {
+            Ok(manifest_str) => {
+                match $crate::model::Manifest::upgrade_from_v0_to_v1(&manifest_str) {
+                    Ok(upgraded_manifest) => {
+                        // If the manifest was upgraded (version was 0), persist it
+                        let needs_upgrade = upgraded_manifest.version > 0 &&
+                            toml::from_str::<$crate::model::Manifest>(&manifest_str)
+                                .map(|m| m.version == 0)
+                                .unwrap_or(true);
+                        (upgraded_manifest, needs_upgrade)
+                    }
+                    Err(_) => {
+                        // Fallback: try parsing as Manifest directly
+                        let fallback = toml::from_str(&manifest_str)
+                            .unwrap_or_else(|_| Manifest::default());
+                        (fallback, false)
+                    }
+                }
+            }
+            Err(_) => (Manifest::default(), false),
+        };
+
+        // If upgraded, write the new manifest back to the archive
+        if upgraded {
+            let _ = archive.write_manifest(&manifest);
+        }
+
         let is_web = manifest.meta.web_archive;
 
         let backend: Box<dyn ImageArchiveTrait> = if is_web {
@@ -57,6 +84,8 @@ pub trait ImageArchiveTrait: Send + Sync {
     fn list_images(&self) -> Vec<String>;
     /// Read the raw bytes of an image by filename.
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError>;
+    /// Read manifest string from the archive.
+    fn read_manifest_string(&self) -> Result<String, ArchiveError>;
     /// Read the manifest from the archive.
     fn read_manifest(&self) -> Result<Manifest, ArchiveError>;
     /// Write the manifest to the archive.
@@ -157,6 +186,12 @@ impl ImageArchive {
     pub fn manifest_mut(&mut self) -> &mut Manifest {
         &mut self.manifest
     }
+
+    /// Read the manifest from the backend.
+    pub fn read_manifest_string(&self) -> Result<String, ArchiveError> {
+        self.backend.read_manifest_string()
+    }
+
 
     /// Read the manifest from the backend.
     pub fn read_manifest(&self) -> Result<Manifest, ArchiveError> {

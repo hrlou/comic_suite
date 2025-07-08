@@ -114,27 +114,30 @@ impl ImageArchiveTrait for ZipImageArchive {
         Ok(buf)
     }
 
+    /// Read the manifest.toml file as a raw string from the ZIP archive.
+    fn read_manifest_string(&self) -> Result<String, ArchiveError> {
+        let file = File::open(&self.path)?;
+        let mut zip = ZipArchive::new(file)?;
+        let mut manifest_file = zip
+            .by_name("manifest.toml")
+            .map_err(|_| ArchiveError::ManifestError("Manifest not found".to_string()))?;
+        let mut contents = String::new();
+        manifest_file
+            .read_to_string(&mut contents)
+            .map_err(|e| ArchiveError::ManifestError(format!("Failed to read manifest: {}", e)))?;
+        Ok(contents)
+    }
+
     /// Read and parse the manifest from the ZIP archive.
     ///
     /// # Returns
     ///
     /// The parsed `Manifest` struct, or an `ArchiveError` if extraction or parsing fails.
     fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
-        let file = File::open(&self.path)?;
-        let mut zip = ZipArchive::new(file)?;
-
-        // Try to read the manifest file
-        if let Ok(mut manifest_file) = zip.by_name("manifest.toml") {
-            let mut contents = String::new();
-            manifest_file.read_to_string(&mut contents)?;
-            let manifest: Manifest = toml::from_str(&contents)
-                .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
-            Ok(manifest)
-        } else {
-            Err(ArchiveError::ManifestError(
-                "Manifest not found".to_string(),
-            ))
-        }
+        let contents = self.read_manifest_string()?;
+        let manifest: Manifest = toml::from_str(&contents)
+            .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
+        Ok(manifest)
     }
 
     /// Write the manifest to the ZIP archive, replacing any existing manifest.

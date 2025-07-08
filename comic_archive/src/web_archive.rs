@@ -59,6 +59,16 @@ impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
     }
 
     /// Read the manifest from the inner backend, or return our own if not present.
+    fn read_manifest_string(&self) -> Result<String, ArchiveError> {
+        self.inner.read_manifest_string().or_else(|_| {
+            // If the inner archive doesn't have a manifest, return our own
+            Err(ArchiveError::ManifestError(
+                "Cannot read manifest to string".to_string(),
+            ))
+        })
+    }
+
+    /// Read the manifest from the inner backend, or return our own if not present.
     fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
         self.inner.read_manifest().or_else(|_| {
             // If the inner archive doesn't have a manifest, return our own

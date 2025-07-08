@@ -122,22 +122,9 @@ impl ImageArchiveTrait for RarImageArchive {
         Ok(buffer)
     }
 
-    /// Read and parse the manifest from the RAR archive.
-    ///
-    /// # Returns
-    ///
-    /// The parsed `Manifest` struct, or an `ArchiveError` if extraction or parsing fails.
-    fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
-        log::info!(
-            "Preparing to extract manifest.toml from RAR archive: {:?}",
-            &self.path
-        );
-
+    fn read_manifest_string(&self) -> Result<String, ArchiveError> {
         let tmp_dir =
             tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
-        log::info!("Created temporary directory: {:?}", tmp_dir.path());
-
-        log::info!("Running 'unrar' to extract manifest.toml...");
         let status = Command::new("unrar")
             .arg("x")
             .arg("-y")
@@ -149,22 +136,26 @@ impl ImageArchiveTrait for RarImageArchive {
             .map_err(|_| ArchiveError::ManifestError("Failed to run unrar".into()))?;
 
         if !status.success() {
-            log::error!("unrar failed or manifest.toml not found in archive");
             return Err(ArchiveError::ManifestError(
                 "manifest.toml not found in archive".into(),
             ));
         }
 
         let manifest_path = tmp_dir.path().join("manifest.toml");
-        log::info!("Reading manifest.toml from: {:?}", manifest_path);
         let manifest_str = fs::read_to_string(&manifest_path)
             .map_err(|_| ArchiveError::ManifestError("Failed to read manifest.toml".into()))?;
+        Ok(manifest_str)
+    }
 
-        log::info!("Parsing manifest.toml...");
+    /// Read and parse the manifest from the RAR archive.
+    ///
+    /// # Returns
+    ///
+    /// The parsed `Manifest` struct, or an `ArchiveError` if extraction or parsing fails.
+    fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
+        let manifest_str = self.read_manifest_string()?;
         let manifest: Manifest = toml::from_str(&manifest_str)
             .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
-        log::info!("Successfully parsed manifest.toml");
-
         Ok(manifest)
     }
 
