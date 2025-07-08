@@ -20,7 +20,6 @@ SolidCompression=yes
 
 [Files]
 Source: "release\comic_reader.exe"; DestDir: "{{app}}"; Flags: ignoreversion
-Source: "release\comic_thumbgen.exe"; DestDir: "{{app}}"; Flags: ignoreversion
 Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -30,7 +29,7 @@ Name: "{{group}}\Uninstall ComicReader"; Filename: "{{uninstallexe}}"
         version
     );
 
-    let iss_path = Path::new("../target/installer.iss");
+    let iss_path = Path::new("target/installer.iss");
     fs::write(&iss_path, iss_content).expect("Failed to write installer.iss");
 
     let iscc = which::which("ISCC.exe").or_else(|_| which::which("iscc.exe"));
@@ -53,8 +52,6 @@ Name: "{{group}}\Uninstall ComicReader"; Filename: "{{uninstallexe}}"
 }
 
 fn main() {
-    embed_resource::compile("app.rc", std::iter::empty::<&str>());
-
     #[cfg(windows)]
     {
         if env::var("PROFILE").unwrap_or_default() == "release" {
