@@ -8,7 +8,7 @@ comic_archive = { path = "../comic_archive" }
 log = "0.4.21"
 env_logger = "0.11.3"
 gif = "0.13.1"
-image = "0.25.1"
+image = "0.25.6"
 lru = "0.12.3"
 zip = "0.6.6"
 eframe = "0.31.1"

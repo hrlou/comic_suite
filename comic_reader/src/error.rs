@@ -20,8 +20,8 @@ pub enum AppError {
     NoImages,
     #[error("Index out of bound")]
     IndexOutOfBounds,
-    // #[error("Image not found: {0}")]
-    // ImageNotFound(String),
+    #[error("Image processing error: {0}")]
+    ImageProcessingError(String),
     #[error("Unsupported archive type or not found")]
     UnsupportedArchive,
     #[error("Network error: {0}")]
@@ -41,6 +41,7 @@ impl From<ArchiveError> for AppError {
             ArchiveError::Io(e) => AppError::Io(e),
             ArchiveError::Other(e) => AppError::Other(e),
             ArchiveError::Zip(e) => AppError::Zip(e),
+            ArchiveError::ImageProcessingError(e) => AppError::ImageProcessingError(e),
         }
     }
 }

@@ -1,0 +1,10 @@
+[package]
+name = "comic_thumbgen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+comic_archive = { path = "../comic_archive" }
+image = "0.25.1"
+log = "0.4.21"
+thiserror = "1.0.61"

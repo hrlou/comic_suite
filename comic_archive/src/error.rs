@@ -10,6 +10,8 @@ pub enum ArchiveError {
     NoImages,
     #[error("Index out of bounds")]
     IndexOutOfBounds,
+    #[error("Image processing error: {0}")]
+    ImageProcessingError(String),
     #[error("Manifest error: {0}")]
     ManifestError(String),
     #[error("Network error: {0}")]

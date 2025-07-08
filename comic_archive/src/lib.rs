@@ -16,8 +16,10 @@ mod rar_archive;
 pub use rar_archive::RarImageArchive;
 
 use std::path::{Path, PathBuf};
-use crate::prelude::*;
+use image::codecs::jpeg::JpegEncoder;
+use image::DynamicImage;
 
+use crate::prelude::*;
 
 #[macro_export]
 macro_rules! archive_case {
@@ -71,6 +73,23 @@ impl ImageArchive {
             "cbr" | "rar" => archive_case!(RarImageArchive, path),
             _ => Err(ArchiveError::UnsupportedArchive),
         }
+    }
+
+    pub fn generate_thumbnail(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        let image_data = self.read_image_by_name(filename)?;
+        let img = image::load_from_memory(&image_data)
+            .map_err(|e| ArchiveError::ImageProcessingError(format!("Failed to load image: {}", e)))?;
+
+        let thumbnail = img.resize(200, 200, image::imageops::FilterType::Lanczos3);
+        let mut buffer = Vec::new();
+        {
+            let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 80);
+            encoder
+                .encode_image(&thumbnail)
+                .map_err(|e| ArchiveError::ImageProcessingError(format!("Failed to write thumbnail: {}", e)))?;
+        }
+
+        Ok(buffer)
     }
 
     pub fn list_images(&self) -> Vec<String> {
