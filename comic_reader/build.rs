@@ -6,8 +6,8 @@ use std::process::Command;
 #[cfg(windows)]
 fn generate_inno_installer() {
     let version = env!("CARGO_PKG_VERSION");
-    let iss_content = format!(
-        r#"
+let iss_content = format!(
+    r#"
 [Setup]
 AppName=Comic Suite
 AppVersion={}
@@ -28,9 +28,17 @@ Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignorevers
 [Icons]
 Name: "{{group}}\Comic Suite"; Filename: "{{app}}\comic_reader.exe"
 Name: "{{group}}\Uninstall Comic Suite"; Filename: "{{uninstallexe}}"
+
+[Registry]
+// Associate .cbz files
+Root: HKCR; Subkey: ".cbz"; ValueType: string; ValueName: ""; ValueData: "ComicSuite.cbz"; Flags: uninsdeletevalue
+Root: HKCR; Subkey: "ComicSuite.cbz"; ValueType: string; ValueName: ""; ValueData: "Comic Suite Comic Book Archive"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "ComicSuite.cbz\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{{app}}\comic_reader.exe,0"
+Root: HKCR; Subkey: "ComicSuite.cbz\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{{app}}\comic_reader.exe"" ""%1""" 
 "#,
-        version
-    );
+
+    version
+);
 
     let iss_path = Path::new("../target/installer.iss");
     fs::write(&iss_path, iss_content).expect("Failed to write installer.iss");
