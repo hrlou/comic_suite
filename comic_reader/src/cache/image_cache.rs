@@ -76,12 +76,16 @@ fn try_decode_animated_webp(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui
     let mut decoder = WebpAnimDecoder::new(buf).ok()?;
     let mut frames = Vec::new();
     let mut delays = Vec::new();
-    for frame in decoder {
-        use std::hash;
+    let mut prev_timestamp = 0u32;
 
-        let delay = frame.timestamp() as u16; // ms
-        let (width, height) = frame.dimensions();
+    for frame in decoder {
+        let timestamp = frame.timestamp();
+        let mut delay = timestamp.saturating_sub(prev_timestamp as i32) as u16;
+        if delay < 20 { delay = 20; } // Clamp to at least 20ms (50 FPS max)
         delays.push(delay);
+        prev_timestamp = timestamp as u32;
+
+        let (width, height) = frame.dimensions();
         let img = image::RgbaImage::from_raw(
             width, height,
             frame.data().to_vec(),
@@ -99,7 +103,6 @@ fn try_decode_animated_webp(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui
         None
     }
 }
-
 fn decode_gif(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui::TextureHandle>, Vec<u16>)> {
     let cursor = Cursor::new(buf);
     let decoder = GifDecoder::new(cursor).ok()?;
