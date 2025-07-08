@@ -9,12 +9,12 @@ fn generate_inno_installer() {
     let iss_content = format!(
         r#"
 [Setup]
-AppName=ComicReader
+AppName=Comic Suite
 AppVersion={}
-DefaultDirName={{pf}}\ComicReader
-DefaultGroupName=ComicReader
+DefaultDirName={{pf}}\Comic Suite
+DefaultGroupName=Comic Suite
 OutputDir=dist
-OutputBaseFilename=ComicReaderInstaller
+OutputBaseFilename=Comic Suite Installer
 Compression=lzma
 SolidCompression=yes
 
@@ -26,8 +26,8 @@ Source: "..\LICENSE.md"; DestDir: "{{app}}"; Flags: ignoreversion
 Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{{group}}\ComicReader"; Filename: "{{app}}\comic_reader.exe"
-Name: "{{group}}\Uninstall ComicReader"; Filename: "{{uninstallexe}}"
+Name: "{{group}}\Comic Suite"; Filename: "{{app}}\comic_reader.exe"
+Name: "{{group}}\Uninstall Comic Suite"; Filename: "{{uninstallexe}}"
 "#,
         version
     );
