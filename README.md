@@ -1,10 +1,3 @@
-# Rust Simple CBZ Viewer
-
-## Purpose
-I was quite annoyed with CDisplayEX being slow, ugly, and crashing often. 
-This is much more performant and lightweight.
-If you want to have thumbnails in Windows file explorer, use CBXShell in the resources folder.
-
 # Comic Suite
 
 Comic Suite is a modular, cross-platform comic archive toolkit and reader. It provides a fast, modern comic book reader (`comic_reader`), a thumbnail generator CLI (`comic_thumbgen`), and a reusable Rust library (`comic_archive`) for working with comic book archives (CBZ, CBR, and web-based comics).
