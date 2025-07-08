@@ -2,24 +2,45 @@ use crate::error::ArchiveError;
 use crate::prelude::*;
 
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Read};
 use std::path::{Path, PathBuf};
 
 use zip::read::ZipArchive;
 
-use toml;
-
+/// An archive backend for CBZ/ZIP comic archives.
+///
+/// This struct provides methods to list images, extract images, and read/write the manifest
+/// from ZIP-based comic archives.
 pub struct ZipImageArchive {
+    /// Path to the ZIP archive file.
     path: PathBuf,
 }
 
 impl ZipImageArchive {
+    /// Create a new `ZipImageArchive` from a given path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the CBZ/ZIP file.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ZipImageArchive` on success, or an `ArchiveError` if the archive cannot be opened.
     pub fn new(path: &Path) -> Result<Self, ArchiveError> {
         Ok(Self {
             path: path.to_path_buf(),
         })
     }
 
+    /// Create a new ZIP archive at the given path with a default manifest.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to create the new ZIP archive.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or an `ArchiveError` if creation fails.
     pub fn create_from_path(path: &Path) -> Result<(), ArchiveError> {
         use std::io::Write;
         use zip::{ZipWriter, write::FileOptions};
@@ -28,7 +49,7 @@ impl ZipImageArchive {
         let mut zip = ZipWriter::new(file);
 
         let options = FileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored) // or .Deflated
+            .compression_method(zip::CompressionMethod::Stored)
             .unix_permissions(0o644);
 
         let mut manifest = Manifest::default();
@@ -47,6 +68,7 @@ impl ZipImageArchive {
 }
 
 impl ImageArchiveTrait for ZipImageArchive {
+    /// List all image filenames in the ZIP archive.
     fn list_images(&self) -> Vec<String> {
         let file = match File::open(&self.path) {
             Ok(f) => f,
@@ -74,6 +96,15 @@ impl ImageArchiveTrait for ZipImageArchive {
         images
     }
 
+    /// Extract and return the raw bytes of an image by filename.
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - The name of the image file within the archive.
+    ///
+    /// # Returns
+    ///
+    /// A vector of bytes containing the image data, or an `ArchiveError` on failure.
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let file = File::open(&self.path)?;
         let mut zip = ZipArchive::new(file)?;
@@ -83,6 +114,11 @@ impl ImageArchiveTrait for ZipImageArchive {
         Ok(buf)
     }
 
+    /// Read and parse the manifest from the ZIP archive.
+    ///
+    /// # Returns
+    ///
+    /// The parsed `Manifest` struct, or an `ArchiveError` if extraction or parsing fails.
     fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
         let file = File::open(&self.path)?;
         let mut zip = ZipArchive::new(file)?;
@@ -99,6 +135,15 @@ impl ImageArchiveTrait for ZipImageArchive {
         }
     }
 
+    /// Write the manifest to the ZIP archive, replacing any existing manifest.
+    ///
+    /// # Arguments
+    ///
+    /// * `manifest` - The manifest to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or an `ArchiveError` if writing fails.
     fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError> {
         use std::fs::{File, remove_file, rename};
         use std::io::Write;

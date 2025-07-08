@@ -9,12 +9,27 @@ use std::os::windows::process::CommandExt;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+/// An archive backend for RAR/CBR comic archives using the external `unrar` and `rar` tools.
+///
+/// This struct provides methods to list images, extract images, and read/write the manifest
+/// from RAR archives. It relies on the `unrar` tool for reading and `rar` (WinRAR) for writing.
 pub struct RarImageArchive {
+    /// Path to the RAR archive file.
     path: PathBuf,
+    /// List of image entries in the archive.
     entries: Vec<String>,
 }
 
 impl RarImageArchive {
+    /// Open a RAR archive and list its image entries.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the RAR/CBR file.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `RarImageArchive` on success, or an `ArchiveError` if the archive cannot be read.
     pub fn new(path: &Path) -> Result<Self, ArchiveError> {
         let output = Command::new("unrar")
             .arg("l")
@@ -68,10 +83,20 @@ impl RarImageArchive {
 }
 
 impl ImageArchiveTrait for RarImageArchive {
+    /// List all image filenames in the RAR archive.
     fn list_images(&self) -> Vec<String> {
         self.entries.clone()
     }
 
+    /// Extract and return the raw bytes of an image by filename.
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - The name of the image file within the archive.
+    ///
+    /// # Returns
+    ///
+    /// A vector of bytes containing the image data, or an `ArchiveError` on failure.
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let tmp_dir = tempdir().map_err(|_| ArchiveError::UnsupportedArchive)?;
         let status = Command::new("unrar")
@@ -97,6 +122,11 @@ impl ImageArchiveTrait for RarImageArchive {
         Ok(buffer)
     }
 
+    /// Read and parse the manifest from the RAR archive.
+    ///
+    /// # Returns
+    ///
+    /// The parsed `Manifest` struct, or an `ArchiveError` if extraction or parsing fails.
     fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
         log::info!(
             "Preparing to extract manifest.toml from RAR archive: {:?}",
@@ -137,6 +167,15 @@ impl ImageArchiveTrait for RarImageArchive {
         Ok(manifest)
     }
 
+    /// Write the manifest to the RAR archive using the external `rar` tool (WinRAR required).
+    ///
+    /// # Arguments
+    ///
+    /// * `manifest` - The manifest to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or an `ArchiveError` if writing fails.
     fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError> {
         log::info!(
             "Preparing to write manifest to RAR archive: {:?}",
@@ -160,6 +199,9 @@ impl ImageArchiveTrait for RarImageArchive {
             "Running 'rar' to update manifest in archive: {:?}",
             &self.path
         );
+
+        drop(tmp_dir);
+
         let status = Command::new("rar")
             .arg("u") // update
             .arg("-ep1") // exclude base dir from names
