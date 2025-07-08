@@ -68,6 +68,7 @@ impl RarImageArchive {
                     || filename_lower.ends_with(".jpeg")
                     || filename_lower.ends_with(".png")
                     || filename_lower.ends_with(".gif")
+                    || filename_lower.ends_with(".webp")
                 {
                     entries.push(filename);
                 }

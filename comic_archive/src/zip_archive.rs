@@ -87,6 +87,7 @@ impl ImageArchiveTrait for ZipImageArchive {
                     || name.ends_with(".jpeg")
                     || name.ends_with(".png")
                     || name.ends_with(".gif")
+                    || name.ends_with("webp")
                 {
                     images.push(name);
                 }
