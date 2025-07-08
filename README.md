@@ -147,7 +147,9 @@ urls = [
 
 ## License
 
-This project is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html).
+This project is licensed under the BSD 3-Clause License.  
+See [LICENSE.md](LICENSE.md) for details.
+
 
 ---
 
@@ -161,7 +163,7 @@ Please open an issue or pull request on GitHub.
 ## Credits
 
 - Built with [Rust](https://www.rust-lang.org/), [eframe/egui](https://github.com/emilk/egui), and [image](https://github.com/image-rs/image).
-- RAR/CBR support via external tools (`unrar`, `WinRAR`).
+- RAR/CBR support via external tools (`unrar`, `rar`, `WinRAR`).
 
 ---
 
