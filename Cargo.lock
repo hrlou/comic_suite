@@ -905,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "comic_reader"
-version = "0.1.6-rc2"
+version = "0.1.6"
 dependencies = [
  "base64ct",
  "comic_archive",
