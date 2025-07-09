@@ -55,6 +55,7 @@ impl TextureCache {
         });
     }
 
+    /*
     /// Get cached animated GIF frame texture by key.
     pub fn get_animated(&self, key: &str) -> Option<&TextureHandle> {
         self.animated.get(key)
@@ -64,6 +65,7 @@ impl TextureCache {
     pub fn set_animated(&mut self, key: String, handle: TextureHandle) {
         self.animated.insert(key, handle);
     }
+    */
 
     pub fn clear(&mut self) {
         debug!("TextureCache cleared");

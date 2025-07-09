@@ -1,7 +1,6 @@
 // std
 pub use std::{
     collections::HashSet,
-    io::Cursor,
     num::NonZeroUsize,
     path::PathBuf,
     sync::{Arc, Mutex},

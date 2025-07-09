@@ -73,7 +73,7 @@ macro_rules! extract_animation_frames {
 
 #[cfg(feature = "webp_animation")]
 fn try_decode_animated_webp(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui::TextureHandle>, Vec<u16>)> {
-    let mut decoder = WebpAnimDecoder::new(buf).ok()?;
+    let decoder = WebpAnimDecoder::new(buf).ok()?;
     let mut frames = Vec::new();
     let mut delays = Vec::new();
     let mut prev_timestamp = 0u32;
