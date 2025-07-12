@@ -20,7 +20,7 @@ pub struct PageTexture {
 pub struct TextureCache {
     pub single: Option<PageTexture>,
     pub dual: HashMap<(usize, usize, u32), TextureHandle>, // (left_idx, right_idx, quantized_zoom)
-    pub animated: HashMap<String, TextureHandle>, // Add this line
+    pub animated: HashMap<String, TextureHandle>,          // Add this line
 }
 
 impl TextureCache {
@@ -83,7 +83,7 @@ impl TextureCache {
 
     pub fn clear(&mut self) {
         debug!("TextureCache cleared");
-        self.single = None;  
+        self.single = None;
         self.dual.clear();
         self.animated.clear(); // Clear animated cache as well
     }

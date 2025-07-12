@@ -55,9 +55,17 @@ macro_rules! draw_static {
 /// Macro to generate animation frame drawing for GIF and WebP
 macro_rules! draw_anim_at_rect {
     ($variant:ident, $ui:expr, $loaded:expr, $rect:expr) => {
-        if let PageImage::$variant { frames, delays, start_time } = &$loaded.image {
+        if let PageImage::$variant {
+            frames,
+            delays,
+            start_time,
+        } = &$loaded.image
+        {
             if frames.is_empty() {
-                warn!(concat!(stringify!($variant), " has no frames: {}"), $loaded.filename);
+                warn!(
+                    concat!(stringify!($variant), " has no frames: {}"),
+                    $loaded.filename
+                );
                 return;
             }
 

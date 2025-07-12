@@ -1,0 +1,19 @@
+[package]
+name = "comic_thumb_provider"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+windows = { version = "0.54", features = [
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_Foundation",
+    "implement"
+] }
+comic_archive = { path = "../comic_archive" }
+image = "0.25.6"
+winreg = "0.55.0"

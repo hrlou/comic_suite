@@ -22,7 +22,7 @@ macro_rules! editable_list {
                     }
                     if ui.button("↓").clicked() && i + 1 < $vec.len() {
                         to_move_down = Some(i);
-                    }   
+                    }
                 }
                 if ui.button("✕").clicked() {
                     to_remove = Some(i);

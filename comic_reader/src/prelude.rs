@@ -23,9 +23,9 @@ pub use lru::LruCache;
 pub use crate::{
     app::CBZViewerApp,
     cache::{
-        SharedImageCache,
+        SharedImageCache, composite_dual_page,
         image_cache::{LoadedPage, PageImage},
-        load_image_async, new_image_cache, composite_dual_page,
+        load_image_async, new_image_cache,
         texture_cache::TextureCache,
     },
     config::*,

@@ -1,5 +1,8 @@
 [workspace]
 resolver = "3"
-members = [ "comic_archive",
-    "comic_reader", "comic_thumbgen",
+members = [ 
+    "comic_archive",
+    "comic_reader",
+    "comic_thumb_provider",
+    "comic_thumbgen",
 ]

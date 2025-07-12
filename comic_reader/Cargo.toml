@@ -44,4 +44,5 @@ path = "src/main.rs"
 default = []
 windows_gui = []
 rar = [ ]
+7z = []
 webp_animation = [ "webp-animation" ]

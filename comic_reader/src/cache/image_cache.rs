@@ -27,8 +27,7 @@ impl PageImage {
     pub fn dimensions(&self) -> (u32, u32) {
         match self {
             PageImage::Static(img) => img.dimensions(),
-            PageImage::AnimatedGif { frames, .. }
-            | PageImage::AnimatedWebP { frames, .. } => {
+            PageImage::AnimatedGif { frames, .. } | PageImage::AnimatedWebP { frames, .. } => {
                 if let Some(frame) = frames.first() {
                     (frame.size()[0] as u32, frame.size()[1] as u32)
                 } else {
@@ -78,7 +77,10 @@ macro_rules! extract_animation_frames {
 }
 
 #[cfg(feature = "webp_animation")]
-fn try_decode_animated_webp(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui::TextureHandle>, Vec<u16>)> {
+fn try_decode_animated_webp(
+    buf: &[u8],
+    ctx: &egui::Context,
+) -> Option<(Vec<egui::TextureHandle>, Vec<u16>)> {
     let decoder = WebpAnimDecoder::new(buf).ok()?;
     let mut frames = Vec::new();
     let mut delays = Vec::new();
@@ -87,15 +89,14 @@ fn try_decode_animated_webp(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui
     for frame in decoder {
         let timestamp = frame.timestamp();
         let mut delay = timestamp.saturating_sub(prev_timestamp as i32) as u16;
-        if delay < 20 { delay = 20; } // Clamp to at least 20ms (50 FPS max)
+        if delay < 20 {
+            delay = 20;
+        } // Clamp to at least 20ms (50 FPS max)
         delays.push(delay);
         prev_timestamp = timestamp as u32;
 
         let (width, height) = frame.dimensions();
-        let img = image::RgbaImage::from_raw(
-            width, height,
-            frame.data().to_vec(),
-        )?;
+        let img = image::RgbaImage::from_raw(width, height, frame.data().to_vec())?;
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             [img.width() as usize, img.height() as usize],
             img.as_raw(),
@@ -168,7 +169,14 @@ pub fn load_image_async(
     std::thread::spawn(move || {
         let filename = &filenames[page];
         let mut archive = archive.lock().unwrap();
-        let buf = archive.read_image_by_index(page).unwrap();
+        let buf = match archive.read_image_by_index(page) {
+            Ok(b) => b,
+            Err(e) => {
+                log::error!("Failed to read image data for '{}': {:?}", filename, e);
+                loading_pages.lock().unwrap().remove(&page);
+                return;
+            }
+        };
 
         let loaded_page = if filename.to_lowercase().ends_with(".gif") {
             if let Some((frames, delays)) = decode_gif(&buf, &ctx) {
@@ -178,8 +186,14 @@ pub fn load_image_async(
                     start_time: Instant::now(),
                 }
             } else {
-                let img = image::load_from_memory(&buf).unwrap();
-                PageImage::Static(img)
+                match image::load_from_memory(&buf) {
+                    Ok(img) => PageImage::Static(img),
+                    Err(e) => {
+                        log::error!("Failed to decode GIF image '{}': {:?}", filename, e);
+                        loading_pages.lock().unwrap().remove(&page);
+                        return;
+                    }
+                }
             }
         } else if filename.to_lowercase().ends_with(".webp") {
             #[cfg(feature = "webp_animation")]
@@ -191,18 +205,36 @@ pub fn load_image_async(
                         start_time: Instant::now(),
                     }
                 } else {
-                    let img = image::load_from_memory(&buf).unwrap();
-                    PageImage::Static(img)
+                    match image::load_from_memory(&buf) {
+                        Ok(img) => PageImage::Static(img),
+                        Err(e) => {
+                            log::error!("Failed to decode WebP image '{}': {:?}", filename, e);
+                            loading_pages.lock().unwrap().remove(&page);
+                            return;
+                        }
+                    }
                 }
             }
             #[cfg(not(feature = "webp_animation"))]
             {
-                let img = image::load_from_memory(&buf).unwrap();
-                PageImage::Static(img)
+                match image::load_from_memory(&buf) {
+                    Ok(img) => PageImage::Static(img),
+                    Err(e) => {
+                        log::error!("Failed to decode WebP image '{}': {:?}", filename, e);
+                        loading_pages.lock().unwrap().remove(&page);
+                        return;
+                    }
+                }
             }
         } else {
-            let img = image::load_from_memory(&buf).unwrap();
-            PageImage::Static(img)
+            match image::load_from_memory(&buf) {
+                Ok(img) => PageImage::Static(img),
+                Err(e) => {
+                    log::error!("Failed to decode image '{}': {:?}", filename, e);
+                    loading_pages.lock().unwrap().remove(&page);
+                    return;
+                }
+            }
         };
 
         let loaded_page = LoadedPage {
@@ -219,10 +251,7 @@ pub fn load_image_async(
     Ok(())
 }
 
-pub fn composite_dual_page(
-    left: &DynamicImage,
-    right: &DynamicImage,
-) -> DynamicImage {
+pub fn composite_dual_page(left: &DynamicImage, right: &DynamicImage) -> DynamicImage {
     let (w, h) = left.dimensions();
     let mut canvas = image::RgbaImage::new(w * 2, h);
     image::imageops::overlay(&mut canvas, left, 0, 0);

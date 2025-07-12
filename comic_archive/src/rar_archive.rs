@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::is_supported_format;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -64,12 +65,7 @@ impl RarImageArchive {
                 }
                 let filename = parts[4..].join(" ");
                 let filename_lower = filename.to_lowercase();
-                if filename_lower.ends_with(".jpg")
-                    || filename_lower.ends_with(".jpeg")
-                    || filename_lower.ends_with(".png")
-                    || filename_lower.ends_with(".gif")
-                    || filename_lower.ends_with(".webp")
-                {
+                if is_supported_format!(&filename_lower) {
                     entries.push(filename);
                 }
             }

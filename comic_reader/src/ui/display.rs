@@ -168,7 +168,10 @@ impl CBZViewerApp {
             // Drawing happens after image_lru lock is dropped and pan handled
             if self.double_page_mode {
                 let pairs = &self.dual_page_pairs;
-                let pair_idx = pairs.iter().position(|(l, _)| *l == self.current_page).unwrap_or(0);
+                let pair_idx = pairs
+                    .iter()
+                    .position(|(l, _)| *l == self.current_page)
+                    .unwrap_or(0);
                 let (left_idx, right_idx_opt) = pairs[pair_idx];
                 let mut image_lru = self.image_lru.lock().unwrap();
                 let left = image_lru.get(&left_idx).cloned();
@@ -185,15 +188,18 @@ impl CBZViewerApp {
                             ctx,
                         );
                         // Draw the stitched texture as a single image
-                        let (w, h) = (l.image.dimensions().0 + r.image.dimensions().0, l.image.dimensions().1.max(r.image.dimensions().1));
+                        let (w, h) = (
+                            l.image.dimensions().0 + r.image.dimensions().0,
+                            l.image.dimensions().1.max(r.image.dimensions().1),
+                        );
                         let disp_size = Vec2::new(w as f32 * self.zoom, h as f32 * self.zoom);
-                        let rect = egui::Rect::from_center_size(image_area.center() + self.pan_offset, disp_size);
+                        let rect = egui::Rect::from_center_size(
+                            image_area.center() + self.pan_offset,
+                            disp_size,
+                        );
                         let builder = egui::UiBuilder::default().max_rect(rect);
                         ui.allocate_new_ui(builder, |ui| {
-                            ui.add(
-                                egui::Image::new(&handle)
-                                    .fit_to_exact_size(disp_size),
-                            );
+                            ui.add(egui::Image::new(&handle).fit_to_exact_size(disp_size));
                         });
                     }
                     (Some(l), None) => {

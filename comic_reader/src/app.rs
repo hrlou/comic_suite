@@ -206,7 +206,8 @@ impl CBZViewerApp {
                 archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
-                ctx.clone());
+                ctx.clone(),
+            );
         }
     }
 
