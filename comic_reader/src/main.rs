@@ -9,6 +9,8 @@ mod macros;
 mod prelude;
 mod ui;
 
+use which::Path;
+
 use crate::prelude::*;
 
 fn check_bin(bin: &str, msg: &str) {
@@ -29,7 +31,7 @@ fn check_bin(bin: &str, msg: &str) {
     }
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging (to file and console)
     env_logger::Builder::from_default_env()
         .format_timestamp_secs()
@@ -40,7 +42,11 @@ fn main() {
     #[cfg(feature = "rar")]
     {
         check_bin("unrar", "RAR archives will not open.");
-        check_bin("rar", "RAR archives will save.");
+        check_bin("rar", "RAR archives will not save.");
+    }
+    #[cfg(feature = "7z")]
+    {
+        check_bin("7z", "7z archives will not open.");
     }
 
     let path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
@@ -49,6 +55,13 @@ fn main() {
         viewport: egui::ViewportBuilder::default().with_inner_size([WIN_WIDTH, WIN_HEIGHT]),
         ..Default::default()
     };
+
+    log::info!("Trying to instantiate path at: {}", config::LOCAL_STORAGE_PATH);
+    // let local_storage = Path::new(config::LOCAL_STORAGE_PATH)?;
+    // if !local_storage.exists() {
+    //     log::info!("Creating directory at: {:?}", local_storage.display());
+    //     std::fs::create_dir(local_storage)?;
+    // }
 
     let _ = eframe::run_native(
         NAME,
@@ -60,4 +73,5 @@ fn main() {
             ))
         }),
     );
+    Ok(())
 }

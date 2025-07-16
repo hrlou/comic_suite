@@ -27,24 +27,14 @@ use crate::prelude::*;
 
 #[macro_export]
 macro_rules! is_supported_format {
-    ($name:expr) => {{
-        let name = $name.to_lowercase();
-        name.ends_with(".jpg")
-            || name.ends_with(".jpeg")
-            || name.ends_with(".png")
-            || name.ends_with(".gif")
-            || name.ends_with(".webp")
-            || name.ends_with(".bmp")
-            || name.ends_with(".ico")
-            || name.ends_with(".tiff")
-            || name.ends_with(".tif")
-            || name.ends_with(".avif")
-            || name.ends_with(".dds")
-            || name.ends_with(".ff")      // farbfeld
-            || name.ends_with(".farbfeld")
-            || name.ends_with(".hdr")
-            || name.ends_with(".svg")
-    }};
+    ($name:expr) => {
+        $name.ends_with(".jpg") ||
+        $name.ends_with(".jpeg") ||
+        $name.ends_with(".png") ||
+        $name.ends_with(".gif") ||
+        $name.ends_with(".bmp") ||
+        $name.ends_with(".webp")
+    };
 }
 
 /// Macro to simplify archive backend instantiation and manifest extraction.

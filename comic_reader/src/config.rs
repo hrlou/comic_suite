@@ -1,4 +1,6 @@
 //! Application-wide configuration constants.
+//! 
+pub const LOCAL_STORAGE_PATH: &str = concat!(env!("LOCALAPPDATA"), "\\", "Comic Suite");
 
 pub const NAME: &str = concat!("Comic Reader ", env!("CARGO_PKG_VERSION"));
 /// Default window width.

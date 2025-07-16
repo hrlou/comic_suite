@@ -17,9 +17,9 @@ pub enum ArchiveError {
     #[error("Network error: {0}")]
     NetworkError(String),
     #[error("IO error: {0}")]
-    Io(#[from] io::Error),
+    Io(#[from] std::io::Error),
     #[error("Zip error: {0}")]
-    Zip(#[from] ZipError),
+    Zip(#[from] zip::result::ZipError),
     #[error("Other error: {0}")]
     Other(String),
 }
