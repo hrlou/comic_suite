@@ -1,10 +1,10 @@
 [package]
 name = "comic_reader"
-version = "0.1.7-rc3"
+version = "0.1.7-rc5"
 edition = "2024"
 
 [dependencies]
-comic_archive = { path = "../comic_archive" }
+comic_archive = { path = "../comic_archive", features = ["7z", "rar"] }
 log = "0.4.21"
 env_logger = "0.11.3"
 gif = "0.13.1"
@@ -43,5 +43,6 @@ path = "src/main.rs"
 [features]
 default = []
 windows_gui = []
-rar = [ ]
+7z = ["comic_archive/7z"]
+rar = ["comic_archive/rar"]
 webp_animation = [ "webp-animation" ]

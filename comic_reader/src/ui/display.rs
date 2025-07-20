@@ -45,6 +45,7 @@ impl CBZViewerApp {
                 if !self.loading_pages.lock().unwrap().is_empty() && self.total_pages > 0 {
                     self.ui_logger.warn(
                         "Please wait for all images to finish loading before editing the manifest.",
+                        None,
                     );
                 } else {
                     Window::new("Edit Manifest")
@@ -52,7 +53,7 @@ impl CBZViewerApp {
                         .show(ctx, |ui| {
                             let mut editor = ManifestEditor::new(&mut archive);
                             if editor.ui(ui, ctx).is_err() {
-                                self.ui_logger.error("Cannot edit Manifest");
+                                self.ui_logger.error("Cannot edit Manifest", None);
                             }
                         });
                 }
@@ -75,6 +76,18 @@ impl CBZViewerApp {
         });
     }
 
+    pub fn display_notification_bar(&mut self, ctx: &Context) {
+        if self.ui_logger.message.is_some() {
+            // You can adjust the position and width as needed
+            egui::Area::new("notification_area".into())
+                .anchor(egui::Align2::LEFT_BOTTOM, [2.0, -24.0])
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    modules::ui_log_msg(self, ui);
+                });
+        }
+    }
+
     /// Draw the bottom bar (zoom, navigation, page info).
     pub fn display_bottom_bar(&mut self, ctx: &Context) {
         egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
@@ -86,13 +99,11 @@ impl CBZViewerApp {
                     ui.separator();
                     ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                         modules::ui_page_nav(self, ui, self.total_pages);
-                        modules::ui_log_msg(self, ui);
                     });
-                } else {
-                    modules::ui_log_msg(self, ui);
                 }
             });
         });
+        self.display_notification_bar(ctx);
     }
 
     /// Draw the central image area (single/dual page, spinner).

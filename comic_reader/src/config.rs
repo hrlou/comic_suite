@@ -19,4 +19,5 @@ pub const DEFAULT_RIGHT_TO_LEFT: bool = false;
 // pub const READING_DIRECTION_AFFECTS_ARROWS: bool = true;
 /// How many pages ahead to pre-cache.
 pub const READ_AHEAD: usize = 16;
+pub const READ_AHEAD_WEB: usize = 4;
 pub const LOG_TIMEOUT: usize = 2;

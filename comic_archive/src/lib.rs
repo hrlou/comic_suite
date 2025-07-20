@@ -10,15 +10,35 @@ pub use zip_archive::ZipImageArchive;
 mod web_archive;
 pub use web_archive::WebImageArchive;
 
+mod folder_archive;
+pub use folder_archive::FolderImageArchive;
+
 #[cfg(feature = "rar")]
 mod rar_archive;
 #[cfg(feature = "rar")]
 pub use rar_archive::RarImageArchive;
 
+#[cfg(feature = "7z")]
+mod seven_zip_archive;
+#[cfg(feature = "7z")]
+pub use seven_zip_archive::SevenZipImageArchive;
+
 use image::codecs::jpeg::JpegEncoder;
 use std::path::{Path, PathBuf};
 
 use crate::prelude::*;
+
+#[macro_export]
+macro_rules! is_supported_format {
+    ($name:expr) => {
+        $name.ends_with(".jpg")
+            || $name.ends_with(".jpeg")
+            || $name.ends_with(".png")
+            || $name.ends_with(".gif")
+            || $name.ends_with(".bmp")
+            || $name.ends_with(".webp")
+    };
+}
 
 /// Macro to simplify archive backend instantiation and manifest extraction.
 ///
@@ -101,11 +121,17 @@ impl ImageArchive {
             .unwrap_or("")
             .to_lowercase();
 
-        match ext.as_str() {
-            "cbz" | "zip" => archive_case!(ZipImageArchive, path),
-            #[cfg(feature = "rar")]
-            "cbr" | "rar" => archive_case!(RarImageArchive, path),
-            _ => Err(ArchiveError::UnsupportedArchive),
+        if path.is_dir() {
+            archive_case!(FolderImageArchive, path)
+        } else {
+            match ext.as_str() {
+                "cbz" | "zip" => archive_case!(ZipImageArchive, path),
+                #[cfg(feature = "rar")]
+                "cbr" | "rar" => archive_case!(RarImageArchive, path),
+                #[cfg(feature = "7z")]
+                "cb7" | "7z" => archive_case!(SevenZipImageArchive, path),
+                _ => Err(ArchiveError::UnsupportedArchive),
+            }
         }
     }
 
@@ -175,7 +201,6 @@ impl ImageArchive {
     pub fn read_manifest_string(&self) -> Result<String, ArchiveError> {
         self.backend.read_manifest_string()
     }
-
 
     /// Read the manifest from the backend.
     pub fn read_manifest(&self) -> Result<Manifest, ArchiveError> {

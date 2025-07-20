@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::Path;
 
 fn print_usage() {
-    eprintln!("Usage: comic_thumbgen <archive.cbz|archive.cbr> <output.jpg> [image_name]");
+    eprintln!("Usage: comic_thumbgen <comic> <output.jpg> [image_name]");
     eprintln!("If image_name is omitted, the first image in the archive will be used.");
 }
 

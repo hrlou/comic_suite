@@ -6,8 +6,8 @@ use std::process::Command;
 #[cfg(windows)]
 fn generate_inno_installer() {
     let version = env!("CARGO_PKG_VERSION");
-let iss_content = format!(
-    r#"
+    let mut iss_content = format!(
+        r#"
 [Setup]
 AppName=Comic Suite
 AppVersion={}
@@ -25,6 +25,9 @@ Source: "..\README.md"; DestDir: "{{app}}"; Flags: ignoreversion
 Source: "..\LICENSE.md"; DestDir: "{{app}}"; Flags: ignoreversion
 Source: "..\comic_reader\assets\*"; DestDir: "{{app}}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[Run]
+Filename: "{{cmd}}"; Parameters: "/C setx PATH ""{{app}};%PATH%"""; StatusMsg: "Adding Comic Suite to PATH..."; Flags: runhidden
+
 [Icons]
 Name: "{{group}}\Comic Suite"; Filename: "{{app}}\comic_reader.exe"
 Name: "{{group}}\Uninstall Comic Suite"; Filename: "{{uninstallexe}}"
@@ -36,9 +39,24 @@ Root: HKCR; Subkey: "ComicSuite.cbz"; ValueType: string; ValueName: ""; ValueDat
 Root: HKCR; Subkey: "ComicSuite.cbz\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{{app}}\comic_reader.exe,0"
 Root: HKCR; Subkey: "ComicSuite.cbz\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{{app}}\comic_reader.exe"" ""%1""" 
 "#,
+        version
+    );
 
-    version
-);
+    #[cfg(feature = "rar")]
+    iss_content.push_str(
+        r#"
+Root: HKCR; Subkey: ".cbr"; ValueType: string; ValueName: ""; ValueData: "ComicSuite.cbz"; Flags: uninsdeletevalue
+Root: HKCR; Subkey: "ComicSuite.cbr"; ValueType: string; ValueName: ""; ValueData: "Comic Book ZIP"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "ComicSuite.cbr\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\comic_reader.exe,0"
+Root: HKCR; Subkey: "ComicSuite.cbr\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\comic_reader.exe"" ""%1""""#);
+
+    #[cfg(feature = "7z")]
+    iss_content.push_str(
+        r#"
+Root: HKCR; Subkey: ".cb7"; ValueType: string; ValueName: ""; ValueData: "ComicSuite.cb7"; Flags: uninsdeletevalue
+Root: HKCR; Subkey: "ComicSuite.cb7"; ValueType: string; ValueName: ""; ValueData: "Comic Book 7z"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "ComicSuite.cb7\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\comic_reader.exe,0"
+Root: HKCR; Subkey: "ComicSuite.cb7\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\comic_reader.exe"" ""%1""""#);
 
     let iss_path = Path::new("../target/installer.iss");
     fs::write(&iss_path, iss_content).expect("Failed to write installer.iss");

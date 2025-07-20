@@ -35,6 +35,7 @@ pub use crate::{
         image::{draw_dual_page, draw_single_page, draw_spinner},
         log::UiLogger,
         manifest_editor::ManifestEditor,
+        // thumbnail_grid::ThumbnailGrid,
     },
 };
 pub use comic_archive::prelude::*;

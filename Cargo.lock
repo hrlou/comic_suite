@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "comic_archive"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "log",
@@ -900,12 +900,13 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml 0.8.23",
+ "walkdir",
  "zip",
 ]
 
 [[package]]
 name = "comic_reader"
-version = "0.1.7-rc3"
+version = "0.1.7-rc5"
 dependencies = [
  "base64ct",
  "comic_archive",

@@ -1,6 +1,4 @@
-use std::io;
 use thiserror::Error;
-use zip::result::ZipError;
 
 #[derive(Debug, Error)]
 pub enum ArchiveError {
@@ -14,12 +12,18 @@ pub enum ArchiveError {
     ImageProcessingError(String),
     #[error("Manifest error: {0}")]
     ManifestError(String),
+    #[error("Manifest not found")]
+    ManifestNotFound,
+    #[error("Manifest parse error: {0}")]
+    ManifestParseError(String),
     #[error("Network error: {0}")]
     NetworkError(String),
     #[error("IO error: {0}")]
-    Io(#[from] io::Error),
+    IoError(String),
     #[error("Zip error: {0}")]
-    Zip(#[from] ZipError),
+    Zip(#[from] zip::result::ZipError),
+    #[error("Internal IO error: {0}")]
+    Io(#[from] std::io::Error),
     #[error("Other error: {0}")]
     Other(String),
 }

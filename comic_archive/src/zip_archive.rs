@@ -1,4 +1,5 @@
 use crate::error::ArchiveError;
+use crate::is_supported_format;
 use crate::prelude::*;
 
 use std::fs::File;
@@ -83,12 +84,7 @@ impl ImageArchiveTrait for ZipImageArchive {
         for i in 0..zip.len() {
             if let Ok(file) = zip.by_index(i) {
                 let name = file.name().to_string();
-                if name.ends_with(".jpg")
-                    || name.ends_with(".jpeg")
-                    || name.ends_with(".png")
-                    || name.ends_with(".gif")
-                    || name.ends_with("webp")
-                {
+                if is_supported_format!(&name) {
                     images.push(name);
                 }
             }

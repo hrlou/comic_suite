@@ -5,6 +5,7 @@ pub mod image;
 pub mod display;
 pub mod log;
 pub mod modules;
+pub mod thumbnail_grid;
 
 pub use image::*;
 // pub use layout::*;

@@ -22,7 +22,7 @@ macro_rules! editable_list {
                     }
                     if ui.button("↓").clicked() && i + 1 < $vec.len() {
                         to_move_down = Some(i);
-                    }   
+                    }
                 }
                 if ui.button("✕").clicked() {
                     to_remove = Some(i);
@@ -87,21 +87,6 @@ impl<'a> ManifestEditor<'a> {
                     .external_pages
                     .get_or_insert_with(ExternalPages::default);
                 editable_list!(ui, "External Page URLs", urls.urls, "URL", true, true);
-            }
-
-            if num_pages > 0 {
-                if manifest.meta.comments.is_none() {
-                    manifest.meta.comments = Some(vec![String::new(); num_pages]);
-                }
-                if let Some(comments) = manifest.meta.comments.as_mut() {
-                    // Ensure comments vector matches urls vector length
-                    if comments.len() < num_pages {
-                        comments.resize(num_pages, String::new());
-                    } else if comments.len() > num_pages {
-                        comments.truncate(num_pages);
-                    }
-                    editable_list!(ui, "Page Comments", comments, "Comment", false, false);
-                }
             }
         }
 

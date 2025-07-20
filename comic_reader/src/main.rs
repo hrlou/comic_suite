@@ -11,7 +11,7 @@ mod ui;
 
 use crate::prelude::*;
 
-fn check_bin(bin: &str, msg: &str) {
+fn check_bin(bin: &str, msg: &str) -> bool {
     log::info!("Checking for '{}' in PATH...", bin);
     if which::which(bin).is_err() {
         rfd::MessageDialog::new()
@@ -24,12 +24,14 @@ fn check_bin(bin: &str, msg: &str) {
             .set_level(rfd::MessageLevel::Error)
             .show();
         log::warn!("'{}' not found in PATH. {}", bin, msg);
+        return false;
     } else {
         log::info!("'{}' found in PATH.", bin);
     }
+    true
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging (to file and console)
     env_logger::Builder::from_default_env()
         .format_timestamp_secs()
@@ -41,6 +43,10 @@ fn main() {
     {
         check_bin("unrar", "RAR archives will not open.");
         check_bin("rar", "RAR archives will save.");
+    }
+    #[cfg(feature = "7z")]
+    {
+        if check_bin("7z", "7z archives will not open.") {}
     }
 
     let path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
@@ -60,4 +66,5 @@ fn main() {
             ))
         }),
     );
+    Ok(())
 }

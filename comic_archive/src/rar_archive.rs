@@ -1,3 +1,4 @@
+use crate::is_supported_format;
 use crate::prelude::*;
 use std::fs;
 use std::io::Read;
@@ -64,12 +65,7 @@ impl RarImageArchive {
                 }
                 let filename = parts[4..].join(" ");
                 let filename_lower = filename.to_lowercase();
-                if filename_lower.ends_with(".jpg")
-                    || filename_lower.ends_with(".jpeg")
-                    || filename_lower.ends_with(".png")
-                    || filename_lower.ends_with(".gif")
-                    || filename_lower.ends_with(".webp")
-                {
+                if is_supported_format!(&filename_lower) {
                     entries.push(filename);
                 }
             }
@@ -99,7 +95,12 @@ impl ImageArchiveTrait for RarImageArchive {
     ///
     /// A vector of bytes containing the image data, or an `ArchiveError` on failure.
     fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
-        let tmp_dir = tempdir().map_err(|_| ArchiveError::UnsupportedArchive)?;
+        let tmp_dir = tempdir().map_err(|_| {
+            ArchiveError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to create temp dir",
+            ))
+        })?;
         let status = Command::new("unrar")
             .arg("x")
             .arg("-y") // assume yes

@@ -28,7 +28,10 @@ pub struct CBZViewerApp {
     pub on_new_comic: bool,
     pub on_open_comic: bool,
     pub on_open_folder: bool,
+    pub is_web_archive: bool,
     pub total_pages: usize,
+    pub show_thumbnail_grid: bool,
+    pub thumbnail_cache: std::collections::HashMap<usize, image::DynamicImage>,
 }
 
 impl Default for CBZViewerApp {
@@ -55,7 +58,10 @@ impl Default for CBZViewerApp {
             on_new_comic: false,
             on_open_comic: false,
             on_open_folder: false,
+            is_web_archive: false,
             total_pages: 0,
+            show_thumbnail_grid: false,
+            thumbnail_cache: std::collections::HashMap::new(),
         }
     }
 }
@@ -67,6 +73,10 @@ impl CBZViewerApp {
         let mut app = Self::default();
         if let Some(path) = path {
             let _ = app.load_new_file(path);
+        }
+        #[cfg(feature = "7z")]
+        {
+            app.ui_logger.warn("7z archives are supported, however, it involves an external tool extracting files to a temporary directory.", Some(10));
         }
         Ok(app)
     }
@@ -85,30 +95,19 @@ impl CBZViewerApp {
     pub fn goto_prev_page(&mut self) {
         if self.current_page == 0 {
             self.ui_logger
-                .warn("Already at the first page, cannot go back.");
+                .warn("Already at the first page, cannot go back.", None);
             return;
         }
-        if self.double_page_mode {
-            if self.current_page == 1 {
-                self.ui_logger
-                    .warn("Already at the first page, cannot go back.");
-                return;
-            }
-            if self.goto_page(self.current_page - 2) {
-                return; // If double page mode, go to the previous double page
-            }
-        }
-        self.goto_page(self.current_page - 1);
+        let step = if self.double_page_mode { 2 } else { 1 };
+        let new_page = self.current_page.saturating_sub(step);
+        self.goto_page(new_page);
     }
 
     /// Go to the next page (with bounds checking).
     pub fn goto_next_page(&mut self) {
-        if self.double_page_mode {
-            if self.goto_page(self.current_page + 2) {
-                return;
-            }
-        }
-        self.goto_page(self.current_page + 1);
+        let step = if self.double_page_mode { 2 } else { 1 };
+        let new_page = self.current_page + step;
+        self.goto_page(new_page);
     }
 
     /// Go to a specific page (with bounds checking).
@@ -116,14 +115,14 @@ impl CBZViewerApp {
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
                 self.ui_logger
-                    .warn(format!("Requested page {} is out of bounds.", page,));
+                    .warn(format!("Requested page {} is out of bounds.", page), None);
                 return false;
             }
             self.current_page = page;
             self.on_page_changed();
         } else {
             self.ui_logger
-                .warn("No filenames available to go to specific page.");
+                .warn("No filenames available to go to specific page.", None);
             return false;
         }
         return true;
@@ -140,6 +139,7 @@ impl CBZViewerApp {
             // return Err(AppError::NoImages);
             // }
             app.filenames = Some(filenames);
+            app.is_web_archive = guard.manifest.meta.web_archive;
         }
         app.archive_path = Some(path);
         app.total_pages = app.filenames.as_ref().map_or(0, |f| f.len());
@@ -190,7 +190,13 @@ impl CBZViewerApp {
 
         // Preload images for current view and next pages
         let mut pages_to_preload = vec![self.current_page];
-        for offset in 1..=READ_AHEAD {
+        let read_ahead = if self.is_web_archive {
+            READ_AHEAD_WEB
+        } else {
+            READ_AHEAD
+        };
+
+        for offset in 1..=read_ahead {
             let next = self.current_page + offset;
             if next < self.total_pages {
                 pages_to_preload.push(next);
@@ -203,7 +209,8 @@ impl CBZViewerApp {
                 archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
-                ctx.clone());
+                ctx.clone(),
+            );
         }
     }
 
@@ -212,10 +219,11 @@ impl CBZViewerApp {
             self.on_goto_page = false;
             let page: usize = self.page_goto_box.parse().unwrap_or(0);
             if self.goto_page(page - 1) {
-                self.ui_logger.info(format!("Navigated to page {}", page));
+                self.ui_logger
+                    .info(format!("Navigated to page {}", page), None);
             } else {
                 self.ui_logger
-                    .warn(format!("Failed to navigate to page {}", page));
+                    .warn(format!("Failed to navigate to page {}", page), None);
             }
         }
         if self.on_new_comic {
@@ -260,7 +268,8 @@ impl eframe::App for CBZViewerApp {
             for file in &i.raw.dropped_files {
                 if let Some(path) = &file.path {
                     self.load_new_file(path.clone()).unwrap_or_else(|e| {
-                        self.ui_logger.error(format!("Failed to load file: {}", e));
+                        self.ui_logger
+                            .error(format!("Failed to load file: {}", e), None);
                     });
                 }
             }
@@ -292,7 +301,11 @@ impl eframe::App for CBZViewerApp {
         }
 
         if self.total_pages > 0 {
-            self.display_main_full(ctx);
+            if self.show_thumbnail_grid {
+                self.display_thumbnail_grid(ctx);
+            } else {
+                self.display_main_full(ctx);
+            }
         } else {
             self.display_main_empty(ctx);
         }

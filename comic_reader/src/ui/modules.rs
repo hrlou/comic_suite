@@ -38,29 +38,13 @@ pub fn ui_page_nav(app: &mut CBZViewerApp, ui: &mut Ui, total_pages: usize) {
     if ui.button("\u{f060}").clicked() {
         app.goto_prev_page();
     }
-    let page_label = if app.double_page_mode && app.current_page != 0 {
-        let left = app.current_page;
-        let right = (app.current_page + 1).min(total_pages.saturating_sub(1));
-        if app.right_to_left {
-            format!("Page ({},{})/{}", right + 1, left + 1, total_pages)
-        } else {
-            format!("Page ({},{})/{}", left + 1, right + 1, total_pages)
-        }
-    } else {
-        format!("Page {}/{}", app.current_page + 1, total_pages)
-    };
+    let page_label = format!("{}/{}", app.current_page + 1, total_pages);
     ui.label(page_label);
 }
 
 pub fn ui_log_msg(app: &mut CBZViewerApp, ui: &mut Ui) {
     if let Some((msg, kind)) = &app.ui_logger.message {
-        ui.separator();
-        let color = match *kind {
-            crate::ui::UiLogLevel::Info => egui::Color32::WHITE,
-            crate::ui::UiLogLevel::Warning => egui::Color32::YELLOW,
-            crate::ui::UiLogLevel::Error => egui::Color32::RED,
-        };
-        ui.colored_label(color, msg.clone());
+        ui.colored_label(kind.color(), format!("{}: {}", kind.as_str(), msg.clone()));
     }
 }
 
@@ -82,7 +66,7 @@ pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
             if let Some(path) = app.archive_path.clone() {
                 let _ = app.load_new_file(path);
             } else {
-                app.ui_logger.warn("Failed to reload");
+                app.ui_logger.warn("Failed to reload", None);
             }
             ui.close_menu();
         }
@@ -131,6 +115,14 @@ pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui) {
             app.has_initialised_zoom = false;
             app.texture_cache.clear();
         }
+    }
+    if ui
+        .selectable_label(app.show_thumbnail_grid, "\u{f009}")
+        .on_hover_text("Thumbnail mode")
+        .clicked()
+    {
+        app.show_thumbnail_grid = !app.show_thumbnail_grid;
+        // app.texture_cache.clear();
     }
 
     if app.double_page_mode {

@@ -42,6 +42,7 @@ impl From<ArchiveError> for AppError {
             ArchiveError::Other(e) => AppError::Other(e),
             ArchiveError::Zip(e) => AppError::Zip(e),
             ArchiveError::ImageProcessingError(e) => AppError::ImageProcessingError(e),
+            _ => AppError::Other("Unknown archive error".to_string()),
         }
     }
 }
