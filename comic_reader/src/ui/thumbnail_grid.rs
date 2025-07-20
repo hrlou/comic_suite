@@ -61,12 +61,44 @@ impl CBZViewerApp {
                                         color_img,
                                         egui::TextureOptions::default(),
                                     );
-                                    ui.put(
+                                    // Highlight border on hover
+                                    let resp = ui.put(
                                         rect.1,
                                         egui::ImageButton::new(&tex)
                                             .frame(false)
                                             .sense(egui::Sense::click()),
-                                    )
+                                    );
+                                    // Draw highlight if hovered
+                                    if resp.hovered() {
+                                        let stroke = egui::Stroke::new(3.0, egui::Color32::LIGHT_BLUE);
+                                        ui.painter().rect_stroke(rect.1, 6.0, stroke, egui::StrokeKind::Outside);
+                                    }
+                                    // Draw index at bottom right
+                                    let index_text = format!("{}", page_idx + 1);
+                                    let text_pos = rect.1.right_bottom() - egui::vec2(6.0, 6.0);
+                                    // Draw background rectangle for text
+                                    let galley = ui.painter().layout_no_wrap(
+                                        index_text.clone(),
+                                        egui::FontId::proportional(14.0),
+                                        egui::Color32::WHITE,
+                                    );
+                                    let rect_bg = egui::Rect::from_min_size(
+                                        text_pos - egui::vec2(galley.size().x, galley.size().y),
+                                        galley.size(),
+                                    );
+                                    ui.painter().rect_filled(
+                                        rect_bg,
+                                        2.0,
+                                        egui::Color32::from_black_alpha(160),
+                                    );
+                                    ui.painter().text(
+                                        text_pos,
+                                        egui::Align2::RIGHT_BOTTOM,
+                                        index_text,
+                                        egui::FontId::proportional(14.0),
+                                        egui::Color32::WHITE,
+                                    );
+                                    resp
                                 } else {
                                     ui.put(rect.1, egui::Label::new("..."))
                                 }
