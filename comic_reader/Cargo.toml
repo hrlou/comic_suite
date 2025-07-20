@@ -1,6 +1,6 @@
 [package]
 name = "comic_reader"
-version = "0.1.7-rc5"
+version = "0.1.7"
 edition = "2024"
 
 [dependencies]
