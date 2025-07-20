@@ -55,6 +55,10 @@ impl TextureCache {
         });
     }
 
+    fn quantize_zoom(zoom: f32) -> u32 {
+        (zoom * 1000.0).round() as u32 // quantize to 3 decimal places
+    }
+
     /*
     /// Get cached animated GIF frame texture by key.
     pub fn get_animated(&self, key: &str) -> Option<&TextureHandle> {
