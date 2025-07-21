@@ -203,14 +203,14 @@ impl CBZViewerApp {
             }
         }
         for &page in &pages_to_preload {
-            let _ = load_image_async(
+            tokio::spawn(load_image_async(
                 page,
                 Arc::new(filenames.clone()),
                 archive.clone(),
                 self.image_lru.clone(),
                 self.loading_pages.clone(),
                 ctx.clone(),
-            );
+            ));
         }
     }
 

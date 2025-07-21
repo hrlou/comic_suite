@@ -1,6 +1,7 @@
 //! LRU cache for decoded images and async image loading.
 
 use crate::prelude::*;
+use tokio::task;
 use std::io::Cursor;
 
 #[cfg(feature = "webp_animation")]
@@ -131,7 +132,7 @@ fn decode_gif(buf: &[u8], ctx: &egui::Context) -> Option<(Vec<egui::TextureHandl
 }
 
 /// Asynchronously load an image from the archive and insert into the cache.
-pub fn load_image_async(
+pub async fn load_image_async(
     page: usize,
     filenames: Arc<Vec<String>>,
     archive: Arc<Mutex<ImageArchive>>,
@@ -160,7 +161,7 @@ pub fn load_image_async(
     let loading_pages = loading_pages.clone();
     let ctx = ctx.clone();
 
-    std::thread::spawn(move || {
+    task::spawn_blocking(move || {
         let filename = &filenames[page];
         let mut archive = archive.lock().unwrap();
         let buf = match archive.read_image_by_index(page) {

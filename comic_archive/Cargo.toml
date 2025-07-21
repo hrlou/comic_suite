@@ -1,12 +1,13 @@
 [package]
 name = "comic_archive"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 
 # [lib]
 # crate-type = ["cdylib"]
 
 [dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 image = "0.25.6"
 zip = "0.6.6"
 toml = "0.8.12"

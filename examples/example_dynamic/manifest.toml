@@ -1,0 +1,7 @@
+version = 2
+
+[meta]
+title = "Archive"
+author = "Dynamic"
+web_archive = false
+dynamic_archive = true

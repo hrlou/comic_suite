@@ -31,7 +31,8 @@ fn check_bin(bin: &str, msg: &str) -> bool {
     true
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging (to file and console)
     env_logger::Builder::from_default_env()
         .format_timestamp_secs()
