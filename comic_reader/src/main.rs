@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if check_bin("7z", "7z archives will not open.") {}
     }
 
-    let path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
+    let path = std::env::args().nth(1).map(PathBuf::from);
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([WIN_WIDTH, WIN_HEIGHT]),
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(move |cc| {
             // Pass CreationContext to CBZViewerApp::new
             Ok(Box::new(
-                CBZViewerApp::new(cc, path.clone()).expect("Failed to load comic"),
+                CBZViewerApp::new(cc, path).expect("Failed to load comic"),
             ))
         }),
     );

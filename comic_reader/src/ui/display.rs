@@ -3,16 +3,28 @@ use crate::{prelude::*, ui};
 
 impl CBZViewerApp {
     pub fn display_main_empty(&mut self, ctx: &egui::Context) {
-        // No archive loaded, show a message
+        use egui::{CentralPanel, RichText, TextStyle};
+
         CentralPanel::default().show(ctx, |ui| {
+            // Allocate a large invisible input area for double-clicks (behind the label)
+            let rect = ui.max_rect();
+            let response = ui.allocate_rect(rect, egui::Sense::click());
+
+            // Draw the centered label on top
             ui.with_layout(
                 egui::Layout::centered_and_justified(egui::Direction::TopDown),
                 |ui| {
                     ui.label(
-                        RichText::new("No Image Loaded \u{e09a}").text_style(TextStyle::Heading),
+                        RichText::new("No Comic Loaded \u{e09a}\ndouble-click to open a comic")
+                            .text_style(TextStyle::Heading),
                     );
                 },
             );
+
+            if response.double_clicked() {
+                log::info!("Opening file dialog for comic selection");
+                self.on_open_comic = true;
+            }
         });
     }
 

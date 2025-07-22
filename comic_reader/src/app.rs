@@ -4,7 +4,7 @@ use crate::{
     // archive::{self, ZipImageArchive},
     prelude::*,
 };
-use egui::Pos2;
+use egui::{epaint::tessellator::Path, Pos2};
 use tokio::sync::Semaphore;
 
 /// The main application struct, holding all state.
@@ -36,6 +36,7 @@ pub struct CBZViewerApp {
     pub show_thumbnail_grid: bool,
     pub thumbnail_cache: Arc<Mutex<std::collections::HashMap<usize, image::DynamicImage>>>,
     pub thumb_semaphore: Arc<Semaphore>,
+    pub new_page: Option<PathBuf>,
     pub show_debug_menu: bool,
 }
 
@@ -69,6 +70,7 @@ impl Default for CBZViewerApp {
             show_thumbnail_grid: false,
             thumbnail_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
             thumb_semaphore: Arc::new(Semaphore::new(8)), // Limit to 8 concurrent thumbnail loads
+            new_page: None,
             show_debug_menu: false,
         }
     }
@@ -80,7 +82,7 @@ impl CBZViewerApp {
         crate::ui::setup_fonts(&cc.egui_ctx);
         let mut app = Self::default();
         if let Some(path) = path {
-            let _ = app.load_new_file(path);
+            let _ = futures::executor::block_on(app.load_new_file(path));
         }
         #[cfg(feature = "7z")]
         {
@@ -272,14 +274,16 @@ impl CBZViewerApp {
         if self.on_open_comic {
             self.on_open_comic = false;
             if let Some(path) = crate::comic_filters!().set_file_name("Comic").pick_file() {
-                let _ = self.load_new_file(path);
+                // let _ = self.load_new_file(path);
+                self.new_page = Some(path);
                 return; // Prevent further update with old state
             }
         }
         if self.on_open_folder {
             self.on_open_folder = false;
             if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                let _ = self.load_new_file(path);
+                // let _ = self.load_new_file(path);
+                self.new_page = Some(path);
                 return;
             }
         }
@@ -373,15 +377,19 @@ impl eframe::App for CBZViewerApp {
         ctx.input(|i| {
             for file in &i.raw.dropped_files {
                 if let Some(path) = &file.path {
-                    // Load file synchronously to avoid borrow checker issues
-                    if let Err(e) = futures::executor::block_on(self.load_new_file(path.clone())) {
-                        if let Ok(mut logger) = self.ui_logger.lock() {
-                            logger.error(format!("Failed to load file: {}", e), None);
-                        }
-                    }
+                    self.new_page = Some(path.clone());
                 }
             }
         });
+        // Load file synchronously to avoid borrow checker issues
+        if let Some(path) = self.new_page.take() {
+            if let Err(e) = futures::executor::block_on(self.load_new_file(path.clone())) {
+                if let Ok(mut logger) = self.ui_logger.lock() {
+                    logger.error(format!("Failed to load file: {}", e), None);
+                }
+            }
+            self.new_page = None;
+        }
 
         self.update_window_title(ctx);
 
