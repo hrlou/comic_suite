@@ -41,6 +41,8 @@ impl CBZViewerApp {
                                     let semaphore = self.thumb_semaphore.clone();
                                     let page_idx_copy = page_idx;
                                     let thumb_size_copy = thumb_size;
+                                    let is_web_archive = self.is_web_archive;
+                                    let image_lru = self.image_lru.clone();
 
                                     // Clone the filename while holding the lock, then drop the guard before spawn
                                     let filename = {
@@ -70,7 +72,7 @@ impl CBZViewerApp {
                                                     use std::io::Cursor;
                                                     let cursor = Cursor::new(&*img_data);
                                                     if let Ok(decoder) = GifDecoder::new(cursor) {
-                                                        if let Ok(mut frames) =
+                                                        if let Ok(frames) =
                                                             decoder.into_frames().collect_frames()
                                                         {
                                                             if let Some(frame) = frames.get(0) {
@@ -89,8 +91,20 @@ impl CBZViewerApp {
                                                 } else {
                                                     image::load_from_memory(&img_data).ok()
                                                 };
-
+                                                let filename_clone = filename.clone();
+                                                let is_web_archive = is_web_archive;
+                                                let image_lru = image_lru.clone();
                                                 if let Some(img) = img_result {
+                                                    // If this is a webarchive, add to LRU cache
+                                                    if is_web_archive {
+                                                        use crate::cache::image_cache::PageImage;
+                                                        let mut lru = image_lru.lock().unwrap();
+                                                        lru.put(page_idx_copy, crate::cache::image_cache::LoadedPage {
+                                                            image: PageImage::Static(img.clone()),
+                                                            filename: filename_clone,
+                                                            index: page_idx_copy.clone(),
+                                                        });
+                                                    }
                                                     // Always resize to thumbnail size before caching
                                                     let thumb = img.resize_exact(
                                                         thumb_size_copy,
@@ -103,12 +117,95 @@ impl CBZViewerApp {
                                             }
                                         });
                                     }
+                                } else {
+                                    // Before spawning the async loader:
+                                    if !self.thumbnail_cache.lock().unwrap().contains_key(&page_idx) {
+                                        // Try LRU cache first
+                                        if let Some(lru_entry) = self.image_lru.lock().unwrap().get(&page_idx) {
+                                            if let PageImage::Static(ref dyn_img) = lru_entry.image {
+                                                let thumb = dyn_img.resize_exact(
+                                                    thumb_size,
+                                                    thumb_size,
+                                                    image::imageops::FilterType::Lanczos3,
+                                                );
+                                                self.thumbnail_cache.lock().unwrap().insert(page_idx, thumb);
+                                            } else {
+                                                // If it's not a static image, skip or handle other variants as needed
+                                            }
+                                        } else {
+                                            let archive = self.archive.clone();
+                                            let cache = self.thumbnail_cache.clone();
+                                            let semaphore = self.thumb_semaphore.clone();
+                                            let page_idx_copy = page_idx;
+                                            let thumb_size_copy = thumb_size;
+
+                                            // Clone the filename while holding the lock, then drop the guard before spawn
+                                            let filename = {
+                                                let archive_ref = archive.as_ref().unwrap();
+                                                let guard = archive_ref.lock().unwrap();
+                                                guard.list_images().get(page_idx_copy).cloned()
+                                            };
+
+                                            if let Some(filename) = filename {
+                                                tokio::spawn(async move {
+                                                    let _permit = semaphore.acquire().await.unwrap();
+
+                                                    // Lock the archive, get the image bytes synchronously, then drop the lock before .await
+                                                    let img_data = {
+                                                        let archive_ref = archive.as_ref().unwrap();
+                                                        let mut guard = archive_ref.lock().unwrap();
+                                                        guard.backend.read_image_by_name_sync(&filename)
+                                                    };
+
+                                                    if let Ok(img_data) = img_data {
+                                                        // Detect GIF by magic bytes
+                                                        let is_gif = img_data.starts_with(b"GIF87a")
+                                                            || img_data.starts_with(b"GIF89a");
+                                                        let img_result = if is_gif {
+                                                            use image::AnimationDecoder;
+                                                            use image::codecs::gif::GifDecoder;
+                                                            use std::io::Cursor;
+                                                            let cursor = Cursor::new(&*img_data);
+                                                            if let Ok(decoder) = GifDecoder::new(cursor) {
+                                                                if let Ok(frames) =
+                                                                    decoder.into_frames().collect_frames()
+                                                                {
+                                                                    if let Some(frame) = frames.get(0) {
+                                                                        Some(image::DynamicImage::from(
+                                                                            frame.clone().into_buffer(),
+                                                                        ))
+                                                                    } else {
+                                                                        None
+                                                                    }
+                                                                } else {
+                                                                    None
+                                                                }
+                                                            } else {
+                                                                None
+                                                            }
+                                                        } else {
+                                                            image::load_from_memory(&img_data).ok()
+                                                        };
+
+                                                        if let Some(img) = img_result {
+                                                            // Always resize to thumbnail size before caching
+                                                            let thumb = img.resize_exact(
+                                                                thumb_size_copy,
+                                                                thumb_size_copy,
+                                                                image::imageops::FilterType::Lanczos3,
+                                                            );
+                                                            let mut cache_guard = cache.lock().unwrap();
+                                                            cache_guard.insert(page_idx_copy, thumb);
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
                                 }
 
                                 // Always show spinner until the thumbnail is loaded
-                                if let Some(img) =
-                                    self.thumbnail_cache.lock().unwrap().get(&page_idx)
-                                {
+                                if let Some(img) = self.thumbnail_cache.lock().unwrap().get(&page_idx) {
                                     let color_img = egui::ColorImage::from_rgba_unmultiplied(
                                         [img.width() as usize, img.height() as usize],
                                         &img.to_rgba8(),
@@ -121,9 +218,12 @@ impl CBZViewerApp {
                                     // Highlight border on hover
                                     let resp = ui.put(
                                         rect.1,
-                                        egui::ImageButton::new(&tex)
-                                            .frame(false)
-                                            .sense(egui::Sense::click()),
+                                        egui::ImageButton::new(
+                                            egui::Image::from_texture(&tex)
+                                                .fit_to_exact_size(egui::vec2(img.width() as f32, img.height() as f32))
+                                        )
+                                        .frame(false)
+                                        .sense(egui::Sense::click()),
                                     );
                                     if resp.hovered() {
                                         let stroke =
@@ -159,29 +259,27 @@ impl CBZViewerApp {
                                         egui::FontId::proportional(14.0),
                                         egui::Color32::WHITE,
                                     );
-                                    resp
+                                    if resp.clicked() {
+                                        self.current_page = page_idx;
+                                        closed_by_user = true;
+                                        // Defer on_page_changed to after the closure to avoid borrowing issues
+                                        // self.on_page_changed();
+                                    }
+                                    ui.add_space(border);
                                 } else {
-                                    ui.put(rect.1, egui::Spinner::new())
+                                    ui.put(rect.1, egui::Spinner::new());
+                                    ui.add_space(border);
                                 }
                             };
-
-                            if resp.clicked() {
-                                self.current_page = page_idx;
-                                closed_by_user = true;
-                                self.on_page_changed();
-                            }
-                            ui.add_space(border);
                         }
                         ui.add_space(edge_margin); // Right margin
                     });
                     idx += columns;
                     ui.add_space(border);
                 }
-
-                ui.add_space(edge_margin); // Bottom margin
-
                 if closed_by_user {
                     self.show_thumbnail_grid = false;
+                    self.on_page_changed();
                 }
             });
         });

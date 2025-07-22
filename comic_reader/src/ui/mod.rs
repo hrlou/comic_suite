@@ -2,6 +2,7 @@
 
 pub mod image;
 // pub mod layout;
+pub mod debug_menu;
 pub mod display;
 pub mod log;
 pub mod modules;

@@ -88,6 +88,7 @@ impl CBZViewerApp {
                 egui::menu::bar(ui, |ui| {
                     modules::ui_file(self, ui, ctx);
                     modules::ui_edit(self, ui, ctx);
+                    modules::ui_debug(self, ui, ctx);
                 });
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                     modules::ui_navigation(self, ui);

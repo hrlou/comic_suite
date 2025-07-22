@@ -4,8 +4,8 @@ use crate::{
     // archive::{self, ZipImageArchive},
     prelude::*,
 };
-use tokio::sync::Semaphore;
 use egui::Pos2;
+use tokio::sync::Semaphore;
 
 /// The main application struct, holding all state.
 pub struct CBZViewerApp {
@@ -36,6 +36,7 @@ pub struct CBZViewerApp {
     pub show_thumbnail_grid: bool,
     pub thumbnail_cache: Arc<Mutex<std::collections::HashMap<usize, image::DynamicImage>>>,
     pub thumb_semaphore: Arc<Semaphore>,
+    pub show_debug_menu: bool,
 }
 
 impl Default for CBZViewerApp {
@@ -68,6 +69,7 @@ impl Default for CBZViewerApp {
             show_thumbnail_grid: false,
             thumbnail_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
             thumb_semaphore: Arc::new(Semaphore::new(8)), // Limit to 8 concurrent thumbnail loads
+            show_debug_menu: false,
         }
     }
 }
@@ -405,6 +407,7 @@ impl eframe::App for CBZViewerApp {
             self.display_main_empty(ctx);
         }
 
+        self.display_debug_menu(ctx);
         self.on_changes();
 
         // Draw the top and bottom bars

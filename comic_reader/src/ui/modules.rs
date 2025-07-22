@@ -153,3 +153,12 @@ pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui) {
         }
     }
 }
+
+pub fn ui_debug(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
+    ui.menu_button("Debug", |ui| {
+        if ui.button("Show Debug Info...").clicked() {
+            app.show_debug_menu = true;
+            ui.close_menu();
+        }
+    });
+}
