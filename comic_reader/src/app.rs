@@ -121,7 +121,7 @@ impl CBZViewerApp {
 
     /// Go to a specific page (with bounds checking).
     pub fn goto_page(&mut self, page: usize) -> bool {
-        self.zoom = 1.0; // Reset zoom on page change
+        self.on_page_changed();
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
                 if let Ok(mut logger) = self.ui_logger.lock() {
