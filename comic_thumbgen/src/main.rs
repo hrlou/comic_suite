@@ -21,7 +21,8 @@ async fn main() {
     let output_path = &args[2];
     let image_name = args.get(3);
 
-    let mut archive = match ImageArchive::process(Path::new(archive_path)) {
+    // FIX: Await the async process method
+    let mut archive = match ImageArchive::process(Path::new(archive_path)).await {
         Ok(a) => a,
         Err(e) => {
             eprintln!("Failed to open archive: {e}");
@@ -47,6 +48,7 @@ async fn main() {
         None => &image_list[0],
     };
 
+    // generate_thumbnail is async, so .await is correct
     let thumb = match archive.generate_thumbnail(image_to_use).await {
         Ok(buf) => buf,
         Err(e) => {

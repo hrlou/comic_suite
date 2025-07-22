@@ -52,8 +52,11 @@ impl CBZViewerApp {
                         .open(&mut self.show_manifest_editor)
                         .show(ctx, |ui| {
                             let mut editor = ManifestEditor::new(&mut archive);
-                            if editor.ui(ui, ctx).is_err() {
-                                self.ui_logger.error("Cannot edit Manifest", None);
+                            match futures::executor::block_on(editor.ui(ui, ctx)) {
+                                Err(_) => {
+                                    self.ui_logger.error("Cannot edit Manifest", None);
+                                }
+                                _ => {}
                             }
                         });
                 }

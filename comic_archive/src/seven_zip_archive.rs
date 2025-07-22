@@ -7,7 +7,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
-use walkdir; // Add this import at the top
+use walkdir;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -70,8 +70,7 @@ impl SevenZipImageArchive {
         })
     }
 
-    /// Reads a file from the archive by name and returns its contents as bytes.
-    fn read_file_by_name(&self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+    fn read_file_by_name_sync(&self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let extracted_path = self.temp_dir.path().join(filename);
         log::info!("Reading extracted file at {:?}", extracted_path);
 
@@ -93,6 +92,7 @@ impl SevenZipImageArchive {
     }
 }
 
+#[cfg(feature = "async")]
 #[async_trait::async_trait]
 impl ImageArchiveTrait for SevenZipImageArchive {
     fn list_images(&self) -> Vec<String> {
@@ -100,31 +100,101 @@ impl ImageArchiveTrait for SevenZipImageArchive {
     }
 
     async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
-        self.read_file_by_name(filename)
-    }
+        let temp_dir_path = self.temp_dir.path().to_path_buf();
+        let filename = filename.to_string();
+        tokio::task::spawn_blocking(move || {
+            let extracted_path = temp_dir_path.join(&filename);
+            log::info!("Reading extracted file at {:?}", extracted_path);
 
-    fn read_manifest_string(&self) -> Result<String, ArchiveError> {
-        match self.read_file_by_name("manifest.toml") {
-            Ok(buffer) => String::from_utf8(buffer).map_err(|_| {
-                ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into())
-            }),
-            Err(_) => {
-                log::info!("manifest.toml not found in archive");
-                Err(ArchiveError::ManifestError(
-                    "manifest.toml not found".into(),
-                ))
+            if !extracted_path.exists() {
+                log::info!("Extracted file not found: {:?}", extracted_path);
+                return Err(ArchiveError::NoImages);
             }
-        }
+
+            let mut file = fs::File::open(&extracted_path).map_err(|_| ArchiveError::NoImages)?;
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer)
+                .map_err(|_| ArchiveError::NoImages)?;
+            log::info!(
+                "Successfully read {} bytes from {:?}",
+                buffer.len(),
+                extracted_path
+            );
+            Ok(buffer)
+        })
+        .await
+        .unwrap_or_else(|e| Err(ArchiveError::Other(format!("Join error: {e}"))))
     }
 
-    fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
-        let manifest_str = self.read_manifest_string()?;
+    async fn read_manifest_string(&self) -> Result<String, ArchiveError> {
+        let temp_dir_path = self.temp_dir.path().to_path_buf();
+        let filename = "manifest.toml".to_string();
+        let buffer = tokio::task::spawn_blocking(move || {
+            let extracted_path = temp_dir_path.join(&filename);
+            log::info!("Reading extracted file at {:?}", extracted_path);
+
+            if !extracted_path.exists() {
+                log::info!("Extracted file not found: {:?}", extracted_path);
+                return Err(ArchiveError::NoImages);
+            }
+
+            let mut file = fs::File::open(&extracted_path).map_err(|_| ArchiveError::NoImages)?;
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer)
+                .map_err(|_| ArchiveError::NoImages)?;
+            log::info!(
+                "Successfully read {} bytes from {:?}",
+                buffer.len(),
+                extracted_path
+            );
+            Ok(buffer)
+        })
+        .await
+        .unwrap_or_else(|e| Err(ArchiveError::Other(format!("Join error: {e}"))))?;
+        String::from_utf8(buffer).map_err(|_| {
+            ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into())
+        })
+    }
+
+    async fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
+        let manifest_str = self.read_manifest_string().await?;
         let manifest: Manifest = toml::from_str(&manifest_str)
             .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
         Ok(manifest)
     }
 
-    fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), ArchiveError> {
+    async fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), ArchiveError> {
+        // TODO: implement writing manifest with CLI
+        Ok(())
+    }
+}
+
+#[cfg(not(feature = "async"))]
+#[async_trait::async_trait]
+impl ImageArchiveTrait for SevenZipImageArchive {
+    fn list_images(&self) -> Vec<String> {
+        self.entries.clone()
+    }
+
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        self.read_file_by_name_sync(filename)
+    }
+
+    async fn read_manifest_string(&self) -> Result<String, ArchiveError> {
+        let buffer = self.read_file_by_name_sync("manifest.toml")?;
+        String::from_utf8(buffer).map_err(|_| {
+            ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into())
+        })
+    }
+
+    async fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
+        let manifest_str = self.read_manifest_string().await?;
+        let manifest: Manifest = toml::from_str(&manifest_str)
+            .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
+        Ok(manifest)
+    }
+
+    async fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), ArchiveError> {
         // TODO: implement writing manifest with CLI
         Ok(())
     }

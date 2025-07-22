@@ -48,7 +48,10 @@ pub fn ui_log_msg(app: &mut CBZViewerApp, ui: &mut Ui) {
     }
 }
 
-pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
+pub async fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
+    // Temporary variable to track if we need to save the image after the menu closure
+    let mut save_image_requested = false;
+
     ui.menu_button("File", |ui| {
         if ui.button("New Comic...").clicked() {
             app.on_new_comic = true;
@@ -62,6 +65,10 @@ pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
             app.on_open_folder = true;
             ui.close_menu();
         }
+        if ui.button("Save Image").clicked() {
+            save_image_requested = true;
+            ui.close_menu();
+        }
         if ui.button("Reload...").clicked() {
             if let Some(path) = app.archive_path.clone() {
                 let _ = app.load_new_file(path);
@@ -71,6 +78,44 @@ pub fn ui_file(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {
             ui.close_menu();
         }
     });
+
+    // Handle the async image saving outside the closure
+    if save_image_requested {
+        let current_page = app.current_page;
+        if let Some(archive_mutex) = &app.archive {
+            if let Ok(mut archive) = archive_mutex.lock() {
+                if let Some(image) = archive.read_image_by_index(current_page).await.ok() {
+                    /*if let Err(e) = image.save_to_file() {
+                        app.ui_logger.error(format!("Failed to save image: {}", e), None);
+                    }*/
+                    let filename = app.filenames.as_ref().and_then(|f| f.get(current_page).cloned()).unwrap();
+                    if let Some(save_path) = rfd::FileDialog::new()
+                        .set_title("Save Image")
+                        .set_file_name(filename)
+                        .save_file()
+                    {
+                        use tokio::io::AsyncWriteExt;
+                        match tokio::fs::File::create(&save_path).await {
+                            Ok(mut file) => {
+                                if let Err(e) = file.write(&image).await {
+                                    app.ui_logger.error(format!("Failed to save image: {}", e), None);
+                                }
+                            }
+                            Err(e) => {
+                                app.ui_logger.error(format!("Failed to save image: {}", e), None);
+                            }
+                        }
+                    } else {
+                        app.ui_logger.warn("No file selected for saving", None);
+                        
+                    }
+
+                } else {
+                    app.ui_logger.warn("No image to save", None);
+                }
+            }
+        }
+    }
 }
 
 pub fn ui_edit(app: &mut CBZViewerApp, ui: &mut Ui, _ctx: &Context) {

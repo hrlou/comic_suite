@@ -128,9 +128,8 @@ impl CBZViewerApp {
         return true;
     }
 
-    pub fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
-        let mut app = Self::default();
-        let archive = ImageArchive::process(&path)?;
+    pub async fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
+        let archive = ImageArchive::process(&path).await?; // CORRECT
 
         let archive = Arc::new(Mutex::new(archive));
         if let Ok(guard) = archive.lock() {
@@ -138,13 +137,12 @@ impl CBZViewerApp {
             // if filenames.is_empty() {
             // return Err(AppError::NoImages);
             // }
-            app.filenames = Some(filenames);
-            app.is_web_archive = guard.manifest.meta.web_archive;
+            self.filenames = Some(filenames);
+            self.is_web_archive = guard.manifest.meta.web_archive;
         }
-        app.archive_path = Some(path);
-        app.total_pages = app.filenames.as_ref().map_or(0, |f| f.len());
-        app.archive = Some(Arc::clone(&archive));
-        *self = app; // Replace current app state with the new one
+        self.archive_path = Some(path);
+        self.total_pages = self.filenames.as_ref().map_or(0, |f| f.len());
+        self.archive = Some(Arc::clone(&archive));
 
         return Ok(());
     }
@@ -276,10 +274,10 @@ impl eframe::App for CBZViewerApp {
         ctx.input(|i| {
             for file in &i.raw.dropped_files {
                 if let Some(path) = &file.path {
-                    self.load_new_file(path.clone()).unwrap_or_else(|e| {
-                        self.ui_logger
-                            .error(format!("Failed to load file: {}", e), None);
-                    });
+                    // Load file synchronously to avoid borrow checker issues
+                    if let Err(e) = futures::executor::block_on(self.load_new_file(path.clone())) {
+                        self.ui_logger.error(format!("Failed to load file: {}", e), None);
+                    }
                 }
             }
         });

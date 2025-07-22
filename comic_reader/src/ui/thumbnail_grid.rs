@@ -35,7 +35,8 @@ impl CBZViewerApp {
                                     let archive = self.archive.clone();
                                     let cache = self.thumbnail_cache.clone();
                                     tokio::spawn(async move {
-                                        // Try LRU first, else load from archive (await if needed)
+                                        // Use async archive/image loading here!
+                                        // e.g. let img_data = archive.lock().unwrap().read_image_by_index(page_idx).await?;
                                         // Insert into cache when done
                                     });
                                 }

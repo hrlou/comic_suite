@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 futures = "0.3.31"
-comic_archive = { path = "../comic_archive", features = ["7z", "rar"] }
+comic_archive = { path = "../comic_archive", features = ["async", "7z", "rar"] }
 log = "0.4.21"
 env_logger = "0.11.3"
 gif = "0.13.1"
@@ -44,6 +44,7 @@ name = "comic_reader"
 path = "src/main.rs"
 
 [features]
+async = []
 default = []
 windows_gui = []
 7z = ["comic_archive/7z"]

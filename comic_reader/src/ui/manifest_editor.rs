@@ -62,7 +62,7 @@ impl<'a> ManifestEditor<'a> {
         Self { archive }
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, _ctx: &Context) -> Result<(), AppError> {
+    pub async fn ui(&mut self, ui: &mut Ui, _ctx: &Context) -> Result<(), AppError> {
         let mut manifest = self.archive.manifest.clone();
         {
             ui.label("Title:");
@@ -93,7 +93,7 @@ impl<'a> ManifestEditor<'a> {
         ui.separator();
 
         if ui.button("Rebuild").clicked() {
-            self.archive.write_manifest(&manifest)?;
+            self.archive.write_manifest(&manifest).await?;
         }
         self.archive.manifest = manifest;
 

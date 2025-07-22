@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 comic_archive = { path = "../comic_archive" }
 image = "0.25.1"
 log = "0.4.21"
