@@ -83,11 +83,12 @@ macro_rules! archive_case {
 ///
 /// Implementors provide methods for listing images, reading images by name,
 /// and reading/writing the manifest.
+#[async_trait::async_trait]
 pub trait ImageArchiveTrait: Send + Sync {
     /// List all image filenames in the archive.
     fn list_images(&self) -> Vec<String>;
     /// Read the raw bytes of an image by filename.
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError>;
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError>;
     /// Read manifest string from the archive.
     fn read_manifest_string(&self) -> Result<String, ArchiveError>;
     /// Read the manifest from the archive.
@@ -147,8 +148,8 @@ impl ImageArchive {
     /// # Returns
     ///
     /// A vector of JPEG bytes on success, or an `ArchiveError` on failure.
-    pub fn generate_thumbnail(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
-        let image_data = self.read_image_by_name(filename)?;
+    pub async fn generate_thumbnail(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        let image_data = self.read_image_by_name(filename).await?;
         let img = image::load_from_memory(&image_data).map_err(|e| {
             ArchiveError::ImageProcessingError(format!("Failed to load image: {}", e))
         })?;
@@ -171,17 +172,17 @@ impl ImageArchive {
     }
 
     /// Read the raw bytes of an image by filename.
-    pub fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
-        self.backend.read_image_by_name(filename)
+    pub async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        self.backend.read_image_by_name(filename).await
     }
 
     /// Read the raw bytes of an image by its index in the archive.
     ///
     /// Returns an error if the index is out of bounds.
-    pub fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, ArchiveError> {
+    pub async fn read_image_by_index(&mut self, index: usize) -> Result<Vec<u8>, ArchiveError> {
         let filenames = self.list_images();
         if index < filenames.len() {
-            self.read_image_by_name(&filenames[index])
+            self.read_image_by_name(&filenames[index]).await
         } else {
             Err(ArchiveError::IndexOutOfBounds)
         }

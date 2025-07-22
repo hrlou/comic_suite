@@ -203,14 +203,23 @@ impl CBZViewerApp {
             }
         }
         for &page in &pages_to_preload {
-            tokio::spawn(load_image_async(
-                page,
-                Arc::new(filenames.clone()),
-                archive.clone(),
-                self.image_lru.clone(),
-                self.loading_pages.clone(),
-                ctx.clone(),
-            ));
+            let filenames = Arc::new(filenames.clone());
+            let archive = archive.clone();
+            let image_lru = self.image_lru.clone();
+            let loading_pages = self.loading_pages.clone();
+            let ctx = ctx.clone();
+            tokio::spawn(async move {
+                // Do NOT lock any mutex here before await!
+                let _ = load_image_async(
+                    page,
+                    filenames,
+                    archive,
+                    image_lru,
+                    loading_pages,
+                    ctx,
+                )
+                .await;
+            });
         }
     }
 

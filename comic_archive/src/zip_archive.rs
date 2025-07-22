@@ -68,6 +68,7 @@ impl ZipImageArchive {
     }
 }
 
+#[async_trait::async_trait]
 impl ImageArchiveTrait for ZipImageArchive {
     /// List all image filenames in the ZIP archive.
     fn list_images(&self) -> Vec<String> {
@@ -102,7 +103,7 @@ impl ImageArchiveTrait for ZipImageArchive {
     /// # Returns
     ///
     /// A vector of bytes containing the image data, or an `ArchiveError` on failure.
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let file = File::open(&self.path)?;
         let mut zip = ZipArchive::new(file)?;
         let mut file = zip.by_name(filename)?;

@@ -79,6 +79,7 @@ impl RarImageArchive {
     }
 }
 
+#[async_trait::async_trait]
 impl ImageArchiveTrait for RarImageArchive {
     /// List all image filenames in the RAR archive.
     fn list_images(&self) -> Vec<String> {
@@ -94,7 +95,7 @@ impl ImageArchiveTrait for RarImageArchive {
     /// # Returns
     ///
     /// A vector of bytes containing the image data, or an `ArchiveError` on failure.
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let tmp_dir = tempdir().map_err(|_| {
             ArchiveError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,

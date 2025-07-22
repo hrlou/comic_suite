@@ -93,12 +93,13 @@ impl SevenZipImageArchive {
     }
 }
 
+#[async_trait::async_trait]
 impl ImageArchiveTrait for SevenZipImageArchive {
     fn list_images(&self) -> Vec<String> {
         self.entries.clone()
     }
 
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         self.read_file_by_name(filename)
     }
 

@@ -9,7 +9,8 @@ fn print_usage() {
     eprintln!("If image_name is omitted, the first image in the archive will be used.");
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         print_usage();
@@ -46,7 +47,7 @@ fn main() {
         None => &image_list[0],
     };
 
-    let thumb = match archive.generate_thumbnail(image_to_use) {
+    let thumb = match archive.generate_thumbnail(image_to_use).await {
         Ok(buf) => buf,
         Err(e) => {
             eprintln!("Failed to generate thumbnail: {e}");

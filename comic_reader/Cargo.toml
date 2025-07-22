@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+futures = "0.3.31"
 comic_archive = { path = "../comic_archive", features = ["7z", "rar"] }
 log = "0.4.21"
 env_logger = "0.11.3"
@@ -25,6 +26,7 @@ base64ct = "1.7.0"
 tempfile = "3.10.1"
 which = "8.0.0"
 webp-animation = { version = "0.9.0", optional = true }
+async-trait = "0.1.88"
 
 [build-dependencies]
 winres = "0.1.12"

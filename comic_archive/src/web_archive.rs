@@ -19,7 +19,8 @@ impl<T: ImageArchiveTrait> WebImageArchive<T> {
     }
 }
 
-impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
+#[async_trait::async_trait]
+impl<T: ImageArchiveTrait + Send + Sync> ImageArchiveTrait for WebImageArchive<T> {
     /// List all external image URLs from the manifest.
     fn list_images(&self) -> Vec<String> {
         if let Some(images) = self.manifest.external_pages.clone() {
@@ -38,8 +39,8 @@ impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
     /// # Returns
     ///
     /// A vector of bytes containing the image data, or an `ArchiveError` on failure.
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
-        let resp = reqwest::blocking::get(filename).map_err(|e| {
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        let resp = reqwest::get(filename).await.map_err(|e| {
             ArchiveError::NetworkError(format!("Failed to GET {}: {}", filename, e))
         })?;
 
@@ -51,7 +52,7 @@ impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
             )));
         }
 
-        let bytes = resp.bytes().map_err(|e| {
+        let bytes = resp.bytes().await.map_err(|e| {
             ArchiveError::NetworkError(format!("Failed to read bytes from {}: {}", filename, e))
         })?;
 

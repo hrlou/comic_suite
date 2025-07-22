@@ -1,11 +1,11 @@
 //! LRU cache for decoded images and async image loading.
 
 use crate::prelude::*;
-use tokio::task;
 use std::io::Cursor;
 
 #[cfg(feature = "webp_animation")]
 use webp_animation::Decoder as WebpAnimDecoder;
+use futures::executor::block_on;
 
 /// Represents a decoded page image (static or animated).
 #[derive(Clone)]
@@ -143,39 +143,47 @@ pub async fn load_image_async(
     {
         let mut loading = loading_pages.lock().unwrap();
         if loading.contains(&page) {
-            debug!("Image page {} is already being loaded (skipping)", page);
             return Ok(());
         }
         loading.insert(page);
     }
 
     if image_lru.lock().unwrap().get(&page).is_some() {
-        debug!("Image page {} is already in LRU cache (hit)", page);
         loading_pages.lock().unwrap().remove(&page);
         return Ok(());
     }
 
-    let filenames = Arc::clone(&filenames);
-    let archive = archive.clone();
-    let image_lru = image_lru.clone();
-    let loading_pages = loading_pages.clone();
-    let ctx = ctx.clone();
+    let filename = filenames[page].clone();
 
-    task::spawn_blocking(move || {
-        let filename = &filenames[page];
-        let mut archive = archive.lock().unwrap();
-        let buf = match archive.read_image_by_index(page) {
-            Ok(b) => b,
-            Err(e) => {
-                log::error!("Failed to read image data for '{}': {:?}", filename, e);
-                loading_pages.lock().unwrap().remove(&page);
-                return;
-            }
-        };
-        archive.read_image_by_index(page).unwrap();
+    // Read the image buffer in a blocking task to avoid holding the lock across .await
+    let archive_clone = archive.clone();
+    let buf: Vec<u8> = match tokio::task::spawn_blocking(move || {
+        let mut archive = archive_clone.lock().unwrap();
+        // Use block_on to run the async function synchronously in the blocking thread
+        // This must return a Vec<u8>
+        block_on(archive.read_image_by_index(page))
+    }).await {
+        Ok(Ok(data)) => data,
+        Ok(Err(e)) => {
+            loading_pages.lock().unwrap().remove(&page);
+            debug!("Failed to read image: {:?}", e);
+            return Ok(());
+        }
+        Err(e) => {
+            loading_pages.lock().unwrap().remove(&page);
+            debug!("Failed to join blocking task: {:?}", e);
+            return Ok(());
+        }
+    };
 
-        let loaded_page = if filename.to_lowercase().ends_with(".gif") {
-            if let Some((frames, delays)) = decode_gif(&buf, &ctx) {
+    let filename_clone = filename.clone();
+    let ctx_clone = ctx.clone();
+    let image_lru_clone = image_lru.clone();
+    let loading_pages_clone = loading_pages.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let loaded_page = if filename_clone.to_lowercase().ends_with(".gif") {
+            if let Some((frames, delays)) = decode_gif(&buf, &ctx_clone) {
                 PageImage::AnimatedGif {
                     frames,
                     delays,
@@ -185,10 +193,10 @@ pub async fn load_image_async(
                 let img = image::load_from_memory(&buf).unwrap();
                 PageImage::Static(img)
             }
-        } else if filename.to_lowercase().ends_with(".webp") {
+        } else if filename_clone.to_lowercase().ends_with(".webp") {
             #[cfg(feature = "webp_animation")]
             {
-                if let Some((frames, delays)) = try_decode_animated_webp(&buf, &ctx) {
+                if let Some((frames, delays)) = try_decode_animated_webp(&buf, &ctx_clone) {
                     PageImage::AnimatedWebP {
                         frames,
                         delays,
@@ -212,13 +220,15 @@ pub async fn load_image_async(
         let loaded_page = LoadedPage {
             image: loaded_page,
             index: page,
-            filename: filename.clone(),
+            filename: filename_clone,
         };
 
-        image_lru.lock().unwrap().put(page, loaded_page);
-        loading_pages.lock().unwrap().remove(&page);
+        image_lru_clone.lock().unwrap().put(page, loaded_page);
+        loading_pages_clone.lock().unwrap().remove(&page);
         debug!("Loaded image page {} into LRU cache", page);
-    });
+    })
+    .await
+    .unwrap();
 
     Ok(())
 }

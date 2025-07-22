@@ -25,6 +25,7 @@ impl FolderImageArchive {
     }
 }
 
+#[async_trait::async_trait]
 impl ImageArchiveTrait for FolderImageArchive {
     fn list_images(&self) -> Vec<String> {
         let mut files = Vec::new();
@@ -43,7 +44,7 @@ impl ImageArchiveTrait for FolderImageArchive {
         files
     }
 
-    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let img_path = self.path.join(filename);
         let mut file = fs::File::open(&img_path)
             .map_err(|e| ArchiveError::IoError(format!("Failed to open image: {}", e)))?;
