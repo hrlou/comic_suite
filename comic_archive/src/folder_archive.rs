@@ -45,6 +45,16 @@ impl ImageArchiveTrait for FolderImageArchive {
         files
     }
 
+    fn read_image_by_name_sync(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        let img_path = self.path.join(filename);
+        let mut file = std::fs::File::open(&img_path)
+            .map_err(|e| ArchiveError::IoError(format!("Failed to open image: {}", e)))?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf)
+            .map_err(|e| ArchiveError::IoError(format!("Failed to read image: {}", e)))?;
+        Ok(buf)
+    }
+
     async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         use tokio::fs::File;
         use tokio::io::AsyncReadExt;
@@ -85,7 +95,8 @@ impl ImageArchiveTrait for FolderImageArchive {
         let manifest_path = self.manifest_path();
         let s = toml::to_string_pretty(manifest)
             .map_err(|e| ArchiveError::ManifestParseError(e.to_string()))?;
-        fs::write(&manifest_path, s).await
+        fs::write(&manifest_path, s)
+            .await
             .map_err(|e| ArchiveError::IoError(format!("Failed to write manifest: {}", e)))
     }
 }

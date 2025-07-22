@@ -83,6 +83,7 @@ macro_rules! archive_case {
 #[async_trait::async_trait]
 pub trait ImageArchiveTrait: Send + Sync {
     fn list_images(&self) -> Vec<String>;
+    fn read_image_by_name_sync(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError>;
     async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError>;
     async fn read_manifest_string(&self) -> Result<String, ArchiveError>;
     async fn read_manifest(&self) -> Result<Manifest, ArchiveError>;
@@ -143,9 +144,8 @@ impl ImageArchive {
                     Ok(manifest_str) => {
                         match crate::model::Manifest::upgrade_from_v0_to_v1(&manifest_str) {
                             Ok(upgraded) => upgraded,
-                            Err(_) => {
-                                toml::from_str(&manifest_str).unwrap_or_else(|_| Manifest::default())
-                            }
+                            Err(_) => toml::from_str(&manifest_str)
+                                .unwrap_or_else(|_| Manifest::default()),
                         }
                     }
                     Err(_) => Manifest::default(),
@@ -164,9 +164,8 @@ impl ImageArchive {
                         Ok(manifest_str) => {
                             match crate::model::Manifest::upgrade_from_v0_to_v1(&manifest_str) {
                                 Ok(upgraded) => upgraded,
-                                Err(_) => {
-                                    toml::from_str(&manifest_str).unwrap_or_else(|_| Manifest::default())
-                                }
+                                Err(_) => toml::from_str(&manifest_str)
+                                    .unwrap_or_else(|_| Manifest::default()),
                             }
                         }
                         Err(_) => Manifest::default(),
@@ -184,9 +183,8 @@ impl ImageArchive {
                         Ok(manifest_str) => {
                             match crate::model::Manifest::upgrade_from_v0_to_v1(&manifest_str) {
                                 Ok(upgraded) => upgraded,
-                                Err(_) => {
-                                    toml::from_str(&manifest_str).unwrap_or_else(|_| Manifest::default())
-                                }
+                                Err(_) => toml::from_str(&manifest_str)
+                                    .unwrap_or_else(|_| Manifest::default()),
                             }
                         }
                         Err(_) => Manifest::default(),
@@ -204,9 +202,8 @@ impl ImageArchive {
                         Ok(manifest_str) => {
                             match crate::model::Manifest::upgrade_from_v0_to_v1(&manifest_str) {
                                 Ok(upgraded) => upgraded,
-                                Err(_) => {
-                                    toml::from_str(&manifest_str).unwrap_or_else(|_| Manifest::default())
-                                }
+                                Err(_) => toml::from_str(&manifest_str)
+                                    .unwrap_or_else(|_| Manifest::default()),
                             }
                         }
                         Err(_) => Manifest::default(),

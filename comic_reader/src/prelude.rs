@@ -31,7 +31,9 @@ pub use crate::{
     config::*,
     error::AppError,
     ui::{
-        clamp_pan, handle_pan, handle_zoom,
+        clamp_pan,
+        handle_pan,
+        handle_zoom,
         image::{draw_dual_page, draw_single_page, draw_spinner},
         log::UiLogger,
         manifest_editor::ManifestEditor,

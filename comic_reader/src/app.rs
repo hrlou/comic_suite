@@ -4,6 +4,8 @@ use crate::{
     // archive::{self, ZipImageArchive},
     prelude::*,
 };
+use tokio::sync::Semaphore;
+use egui::Pos2;
 
 /// The main application struct, holding all state.
 pub struct CBZViewerApp {
@@ -13,7 +15,7 @@ pub struct CBZViewerApp {
     pub image_lru: SharedImageCache,
     pub current_page: usize,
     pub texture_cache: TextureCache,
-    pub ui_logger: UiLogger,
+    pub ui_logger: Arc<Mutex<UiLogger>>,
     pub zoom: f32,
     pub pan_offset: Vec2,
     pub original_pan_offset: Vec2,
@@ -28,10 +30,12 @@ pub struct CBZViewerApp {
     pub on_new_comic: bool,
     pub on_open_comic: bool,
     pub on_open_folder: bool,
+    pub on_save_image: bool,
     pub is_web_archive: bool,
     pub total_pages: usize,
     pub show_thumbnail_grid: bool,
-    pub thumbnail_cache: std::collections::HashMap<usize, image::DynamicImage>,
+    pub thumbnail_cache: Arc<Mutex<std::collections::HashMap<usize, image::DynamicImage>>>,
+    pub thumb_semaphore: Arc<Semaphore>,
 }
 
 impl Default for CBZViewerApp {
@@ -43,7 +47,7 @@ impl Default for CBZViewerApp {
             image_lru: new_image_cache(CACHE_SIZE),
             current_page: 0,
             texture_cache: TextureCache::new(),
-            ui_logger: UiLogger::new(),
+            ui_logger: Arc::new(Mutex::new(UiLogger::new())),
             zoom: 1.0,
             pan_offset: Vec2::ZERO,
             original_pan_offset: Vec2::ZERO,
@@ -58,10 +62,12 @@ impl Default for CBZViewerApp {
             on_new_comic: false,
             on_open_comic: false,
             on_open_folder: false,
+            on_save_image: false,
             is_web_archive: false,
             total_pages: 0,
             show_thumbnail_grid: false,
-            thumbnail_cache: std::collections::HashMap::new(),
+            thumbnail_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            thumb_semaphore: Arc::new(Semaphore::new(8)), // Limit to 8 concurrent thumbnail loads
         }
     }
 }
@@ -76,7 +82,9 @@ impl CBZViewerApp {
         }
         #[cfg(feature = "7z")]
         {
-            app.ui_logger.warn("7z archives are supported, however, it involves an external tool extracting files to a temporary directory.", Some(10));
+            if let Ok(mut logger) = app.ui_logger.lock() {
+                logger.warn("7z archives are supported, however, it involves an external tool extracting files to a temporary directory.", Some(10));
+            }
         }
         Ok(app)
     }
@@ -94,8 +102,9 @@ impl CBZViewerApp {
     /// Go to the previous page (with bounds checking).
     pub fn goto_prev_page(&mut self) {
         if self.current_page == 0 {
-            self.ui_logger
-                .warn("Already at the first page, cannot go back.", None);
+            if let Ok(mut logger) = self.ui_logger.lock() {
+                logger.warn("Already at the first page, cannot go back.", None);
+            }
             return;
         }
         let step = if self.double_page_mode { 2 } else { 1 };
@@ -112,39 +121,52 @@ impl CBZViewerApp {
 
     /// Go to a specific page (with bounds checking).
     pub fn goto_page(&mut self, page: usize) -> bool {
+        self.zoom = 1.0; // Reset zoom on page change
         if let Some(filenames) = &self.filenames {
             if page >= filenames.len() {
-                self.ui_logger
-                    .warn(format!("Requested page {} is out of bounds.", page), None);
+                if let Ok(mut logger) = self.ui_logger.lock() {
+                    logger.warn(
+                        format!("Requested page {} is out of bounds.", page + 1),
+                        None,
+                    );
+                }
                 return false;
             }
             self.current_page = page;
-            self.on_page_changed();
+            true
         } else {
-            self.ui_logger
-                .warn("No filenames available to go to specific page.", None);
-            return false;
+            if let Ok(mut logger) = self.ui_logger.lock() {
+                logger.warn("No filenames available to go to specific page.", None);
+            }
+            false
         }
-        return true;
     }
 
     pub async fn load_new_file(&mut self, path: PathBuf) -> Result<(), AppError> {
-        let archive = ImageArchive::process(&path).await?; // CORRECT
+        // Reset self to default values, but keep the logger and context if needed
+        let mut new_self = Self::default();
+
+        // Optionally preserve logger or other fields if needed
+        new_self.ui_logger = Arc::clone(&self.ui_logger);
+
+        let archive = ImageArchive::process(&path).await?;
 
         let archive = Arc::new(Mutex::new(archive));
         if let Ok(guard) = archive.lock() {
             let filenames = guard.list_images();
-            // if filenames.is_empty() {
-            // return Err(AppError::NoImages);
-            // }
-            self.filenames = Some(filenames);
-            self.is_web_archive = guard.manifest.meta.web_archive;
+            new_self.filenames = Some(filenames);
+            new_self.is_web_archive = guard.manifest.meta.web_archive;
         }
-        self.archive_path = Some(path);
-        self.total_pages = self.filenames.as_ref().map_or(0, |f| f.len());
-        self.archive = Some(Arc::clone(&archive));
+        new_self.archive_path = Some(path);
+        new_self.total_pages = new_self.filenames.as_ref().map_or(0, |f| f.len());
+        new_self.archive = Some(Arc::clone(&archive));
+        new_self.image_lru = new_image_cache(CACHE_SIZE);
+        new_self.current_page = 0;
 
-        return Ok(());
+        // Move new_self's fields into self
+        *self = new_self;
+
+        Ok(())
     }
 
     /// Called whenever the page changes: resets zoom, pan, and clears texture cache.
@@ -208,31 +230,35 @@ impl CBZViewerApp {
             let ctx = ctx.clone();
             tokio::spawn(async move {
                 // Do NOT lock any mutex here before await!
-                let _ = load_image_async(
-                    page,
-                    filenames,
-                    archive,
-                    image_lru,
-                    loading_pages,
-                    ctx,
-                )
-                .await;
+                let _ =
+                    load_image_async(page, filenames, archive, image_lru, loading_pages, ctx).await;
             });
         }
     }
 
     pub fn on_changes(&mut self) {
+        // Handle goto page logic
         if self.on_goto_page {
             self.on_goto_page = false;
-            let page: usize = self.page_goto_box.parse().unwrap_or(0);
-            if self.goto_page(page - 1) {
-                self.ui_logger
-                    .info(format!("Navigated to page {}", page), None);
+            // Parse the page number from the goto box
+            if let Ok(page) = self.page_goto_box.trim().parse::<usize>() {
+                let page = page.saturating_sub(1); // Convert to 0-based index
+                if self.goto_page(page) {
+                    if let Ok(mut logger) = self.ui_logger.lock() {
+                        logger.info(format!("Navigated to page {}", page + 1), None);
+                    }
+                } else {
+                    if let Ok(mut logger) = self.ui_logger.lock() {
+                        logger.warn(format!("Failed to navigate to page {}", page + 1), None);
+                    }
+                }
             } else {
-                self.ui_logger
-                    .warn(format!("Failed to navigate to page {}", page), None);
+                if let Ok(mut logger) = self.ui_logger.lock() {
+                    logger.warn("Invalid page number entered".to_string(), None);
+                }
             }
         }
+
         if self.on_new_comic {
             self.on_new_comic = false;
             if let Some(path) = crate::comic_filters!().set_file_name("Comic").save_file() {
@@ -255,6 +281,77 @@ impl CBZViewerApp {
                 return;
             }
         }
+        // Handle the async image saving outside the closure
+        /*if self.on_save_image {
+            self.on_save_image = false;
+            let ui_logger = self.ui_logger.clone();
+            let archive = self.archive.clone();
+            let filenames = self.filenames.clone();
+            let current_page = self.current_page;
+            // Spawn a background task to avoid blocking the UI
+            tokio::spawn(async move {
+                if let Some(archive_mutex) = archive {
+                    // Lock and extract the filename, then drop the guard before await
+                    let filename = filenames
+                        .as_ref()
+                        .and_then(|f| f.get(current_page).cloned())
+                        .unwrap_or_else(|| "image".to_string());
+
+                    // Clone the Arc<Mutex<ImageArchive>> for use in async block
+                    let archive_clone = archive_mutex.clone();
+
+                    // Lock the archive, clone what is needed, and drop the guard before await
+                    // Here, we only need to pass the filename to the async function
+                    // and reacquire the lock inside the async function if needed
+                    let image_data = {
+                        // Lock the archive, then drop the guard before await
+                        // We assume read_image_by_name only needs &mut self, so we reacquire the lock inside the async block
+                        // This avoids holding the MutexGuard across await
+                        let mut archive_guard = archive_clone.lock().unwrap();
+                        // Call the async function and drop the guard before await
+                        let fut = archive_guard.read_image_by_name(&filename);
+                        drop(archive_guard);
+                        fut.await
+                    };
+
+                    if let Ok(image) = image_data {
+                        let image_vec: Vec<u8> = image.into();
+                        if let Some(save_path) = rfd::FileDialog::new()
+                            .set_title("Save Image")
+                            .set_file_name(&filename)
+                            .save_file()
+                        {
+                            use tokio::io::AsyncWriteExt;
+                            match tokio::fs::File::create(&save_path).await {
+                                Ok(mut file) => {
+                                    if let Err(e) = file.write_all(&image_vec).await {
+                                        if let Ok(mut logger) = ui_logger.lock() {
+                                            logger.error(
+                                                format!("Failed to save image: {}", e),
+                                                None,
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    if let Ok(mut logger) = ui_logger.lock() {
+                                        logger.error(format!("Failed to save image: {}", e), None);
+                                    }
+                                }
+                            }
+                        } else {
+                            if let Ok(mut logger) = ui_logger.lock() {
+                                logger.warn("No file selected for saving".to_string(), None);
+                            }
+                        }
+                    } else {
+                        if let Ok(mut logger) = ui_logger.lock() {
+                            logger.warn("No image to save".to_string(), None);
+                        }
+                    }
+                }
+            });
+        }*/
     }
 
     pub fn handle_input(&mut self, ctx: &egui::Context) {
@@ -276,7 +373,9 @@ impl eframe::App for CBZViewerApp {
                 if let Some(path) = &file.path {
                     // Load file synchronously to avoid borrow checker issues
                     if let Err(e) = futures::executor::block_on(self.load_new_file(path.clone())) {
-                        self.ui_logger.error(format!("Failed to load file: {}", e), None);
+                        if let Ok(mut logger) = self.ui_logger.lock() {
+                            logger.error(format!("Failed to load file: {}", e), None);
+                        }
                     }
                 }
             }
@@ -284,22 +383,11 @@ impl eframe::App for CBZViewerApp {
 
         self.update_window_title(ctx);
 
-        /*if let Some(archive) = self.archive.as_ref() {
-            let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
-            self.preload_images(archive);
-            self.display_main_full(ctx);
-        } else {
-            self.display_main_empty(ctx);
-        }
-
-        // Handle Manifest
-        if self.show_manifest_editor {
-            self.display_manifest_editor(ctx);
-        }*/
-
         // Only preload images if we have an archive and not in manifest editor mode
         if self.show_manifest_editor {
-            self.display_manifest_editor(ctx);
+            if let Ok(mut logger) = self.ui_logger.lock() {
+                logger.clear_expired();
+            }
         } else {
             if let Some(archive) = self.archive.as_ref() {
                 let archive: Arc<Mutex<ImageArchive>> = Arc::clone(archive);
@@ -323,6 +411,8 @@ impl eframe::App for CBZViewerApp {
         self.display_top_bar(ctx);
         self.display_bottom_bar(ctx);
 
-        self.ui_logger.clear_expired();
+        if let Ok(mut logger) = self.ui_logger.lock() {
+            logger.clear_expired();
+        }
     }
 }

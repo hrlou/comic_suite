@@ -99,6 +99,10 @@ impl ImageArchiveTrait for SevenZipImageArchive {
         self.entries.clone()
     }
 
+    fn read_image_by_name_sync(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        self.read_file_by_name_sync(filename)
+    }
+
     async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let temp_dir_path = self.temp_dir.path().to_path_buf();
         let filename = filename.to_string();
@@ -151,9 +155,8 @@ impl ImageArchiveTrait for SevenZipImageArchive {
         })
         .await
         .unwrap_or_else(|e| Err(ArchiveError::Other(format!("Join error: {e}"))))?;
-        String::from_utf8(buffer).map_err(|_| {
-            ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into())
-        })
+        String::from_utf8(buffer)
+            .map_err(|_| ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into()))
     }
 
     async fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
@@ -170,31 +173,38 @@ impl ImageArchiveTrait for SevenZipImageArchive {
 }
 
 #[cfg(not(feature = "async"))]
-#[async_trait::async_trait]
+// #[async_trait::async_trait]
 impl ImageArchiveTrait for SevenZipImageArchive {
     fn list_images(&self) -> Vec<String> {
         self.entries.clone()
     }
 
-    async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
-        self.read_file_by_name_sync(filename)
+    fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        self.read_file_by_name(filename)
     }
 
-    async fn read_manifest_string(&self) -> Result<String, ArchiveError> {
-        let buffer = self.read_file_by_name_sync("manifest.toml")?;
-        String::from_utf8(buffer).map_err(|_| {
-            ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into())
-        })
+    fn read_manifest_string(&self) -> Result<String, ArchiveError> {
+        match self.read_file_by_name("manifest.toml") {
+            Ok(buffer) => String::from_utf8(buffer).map_err(|_| {
+                ArchiveError::ManifestError("manifest.toml is not valid UTF-8".into())
+            }),
+            Err(_) => {
+                log::info!("manifest.toml not found in archive");
+                Err(ArchiveError::ManifestError(
+                    "manifest.toml not found".into(),
+                ))
+            }
+        }
     }
 
-    async fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
-        let manifest_str = self.read_manifest_string().await?;
+    fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
+        let manifest_str = self.read_manifest_string()?;
         let manifest: Manifest = toml::from_str(&manifest_str)
             .map_err(|e| ArchiveError::ManifestError(format!("Invalid TOML: {}", e)))?;
         Ok(manifest)
     }
 
-    async fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), ArchiveError> {
+    fn write_manifest(&mut self, _manifest: &Manifest) -> Result<(), ArchiveError> {
         // TODO: implement writing manifest with CLI
         Ok(())
     }

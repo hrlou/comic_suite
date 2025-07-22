@@ -22,6 +22,26 @@ impl<T: ImageArchiveTrait + Send + Sync> ImageArchiveTrait for WebImageArchive<T
         }
     }
 
+    fn read_image_by_name_sync(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
+        let resp = reqwest::blocking::get(filename).map_err(|e| {
+            ArchiveError::NetworkError(format!("Failed to GET {}: {}", filename, e))
+        })?;
+
+        if !resp.status().is_success() {
+            return Err(ArchiveError::NetworkError(format!(
+                "HTTP error {} for {}",
+                resp.status(),
+                filename
+            )));
+        }
+
+        let bytes = resp.bytes().map_err(|e| {
+            ArchiveError::NetworkError(format!("Failed to read bytes from {}: {}", filename, e))
+        })?;
+
+        Ok(bytes.to_vec())
+    }
+
     async fn read_image_by_name(&mut self, filename: &str) -> Result<Vec<u8>, ArchiveError> {
         let resp = reqwest::get(filename).await.map_err(|e| {
             ArchiveError::NetworkError(format!("Failed to GET {}: {}", filename, e))
@@ -47,7 +67,10 @@ impl<T: ImageArchiveTrait + Send + Sync> ImageArchiveTrait for WebImageArchive<T
     }
 
     async fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
-        self.inner.read_manifest().await.or_else(|_| Ok(self.manifest.clone()))
+        self.inner
+            .read_manifest()
+            .await
+            .or_else(|_| Ok(self.manifest.clone()))
     }
 
     async fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError> {
@@ -90,7 +113,9 @@ impl<T: ImageArchiveTrait> ImageArchiveTrait for WebImageArchive<T> {
     }
 
     fn read_manifest(&self) -> Result<Manifest, ArchiveError> {
-        self.inner.read_manifest().or_else(|_| Ok(self.manifest.clone()))
+        self.inner
+            .read_manifest()
+            .or_else(|_| Ok(self.manifest.clone()))
     }
 
     fn write_manifest(&mut self, manifest: &Manifest) -> Result<(), ArchiveError> {

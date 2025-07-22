@@ -1,5 +1,5 @@
-use crate::prelude::*;
 use crate::ui::modules;
+use crate::{prelude::*, ui};
 
 impl CBZViewerApp {
     pub fn display_main_empty(&mut self, ctx: &egui::Context) {
@@ -43,22 +43,39 @@ impl CBZViewerApp {
         if let Some(archive_mutex) = &self.archive {
             if let Ok(mut archive) = archive_mutex.lock() {
                 if !self.loading_pages.lock().unwrap().is_empty() && self.total_pages > 0 {
-                    self.ui_logger.warn(
-                        "Please wait for all images to finish loading before editing the manifest.",
-                        None,
-                    );
+                    if let Ok(mut logger) = self.ui_logger.lock() {
+                        logger.warn(
+                            "Please wait for all images to finish loading before editing the manifest.",
+                            None,
+                        );
+                    }
                 } else {
-                    Window::new("Edit Manifest")
-                        .open(&mut self.show_manifest_editor)
-                        .show(ctx, |ui| {
-                            let mut editor = ManifestEditor::new(&mut archive);
-                            match futures::executor::block_on(editor.ui(ui, ctx)) {
-                                Err(_) => {
-                                    self.ui_logger.error("Cannot edit Manifest", None);
-                                }
-                                _ => {}
+                    let mut editor = ManifestEditor::new(&mut archive);
+                    // Extract the mutable reference before the closure to avoid borrow checker issues
+                    let show_manifest_editor = &mut self.show_manifest_editor;
+
+                    // Clone the logger Arc<Mutex<...>> before the closure
+                    let logger = self.ui_logger.clone();
+
+                    // Run the editor UI, ensuring no borrow of self inside the closure
+                    let window_output = {
+                        let editor_ref = &mut editor;
+                        Window::new("Edit Manifest")
+                            .open(show_manifest_editor)
+                            .show(ctx, |ui| {
+                                futures::executor::block_on(editor_ref.ui(ui, ctx))
+                            })
+                    };
+
+                    if let Some(window_output) = window_output {
+                        if let Some(Err(_)) = window_output.inner {
+                            if let Ok(mut logger) = logger.lock() {
+                                logger.error("Cannot edit Manifest", None);
                             }
-                        });
+                        }
+                    }
+
+                    // No further use of self here
                 }
             }
         }
@@ -80,15 +97,33 @@ impl CBZViewerApp {
     }
 
     pub fn display_notification_bar(&mut self, ctx: &Context) {
-        if self.ui_logger.message.is_some() {
-            // You can adjust the position and width as needed
-            egui::Area::new("notification_area".into())
-                .anchor(egui::Align2::LEFT_BOTTOM, [2.0, -24.0])
-                .order(egui::Order::Foreground)
-                .show(ctx, |ui| {
-                    modules::ui_log_msg(self, ui);
-                });
-        }
+        /*if let Ok(logger) = self.ui_logger.lock() {
+            if logger.message.is_some() {
+                // You can adjust the position and width as needed
+                egui::Area::new("notification_area".into())
+                    .anchor(egui::Align2::LEFT_BOTTOM, [2.0, -24.0])
+                    .order(egui::Order::Foreground)
+                    .show(ctx, |ui| {
+                        modules::ui_log_msg(self, ui);
+                    });
+            }
+        }*/
+        let ref ui_logger = self.ui_logger.lock();
+        let (msg, kind) = if let Ok(logger) = ui_logger {
+            if let Some((msg, kind)) = &logger.message {
+                (msg.clone(), kind.clone())
+            } else {
+                return; // No message to display
+            }
+        } else {
+            return; // Failed to lock logger
+        };
+        egui::Area::new("notification_area".into())
+            .anchor(egui::Align2::LEFT_BOTTOM, [2.0, -24.0])
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                modules::ui_log_msg(ui, &msg, kind);
+            });
     }
 
     /// Draw the bottom bar (zoom, navigation, page info).

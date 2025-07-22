@@ -3,9 +3,9 @@
 use crate::prelude::*;
 use std::io::Cursor;
 
+use futures::executor::block_on;
 #[cfg(feature = "webp_animation")]
 use webp_animation::Decoder as WebpAnimDecoder;
-use futures::executor::block_on;
 
 /// Represents a decoded page image (static or animated).
 #[derive(Clone)]
@@ -162,7 +162,9 @@ pub async fn load_image_async(
         // Use block_on to run the async function synchronously in the blocking thread
         // This must return a Vec<u8>
         block_on(archive.read_image_by_index(page))
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(data)) => data,
         Ok(Err(e)) => {
             loading_pages.lock().unwrap().remove(&page);

@@ -10,8 +10,10 @@ impl CBZViewerApp {
 
             ui.add_space(edge_margin); // Top margin
 
-            let thumb_size = ((available_width - (columns as f32 + 1.0) * border - 2.0 * edge_margin) / columns as f32)
-                .floor() as u32;
+            let thumb_size =
+                ((available_width - (columns as f32 + 1.0) * border - 2.0 * edge_margin)
+                    / columns as f32)
+                    .floor() as u32;
 
             let total = self.total_pages;
 
@@ -27,20 +29,86 @@ impl CBZViewerApp {
                             if page_idx >= total {
                                 break;
                             }
-                            let rect = ui.allocate_space(egui::vec2(thumb_size as f32, thumb_size as f32));
+                            let rect =
+                                ui.allocate_space(egui::vec2(thumb_size as f32, thumb_size as f32));
                             let resp = {
                                 // Only generate if visible and not already cached
-                                if ui.is_rect_visible(rect.1) && !self.thumbnail_cache.contains_key(&page_idx) {
-                                    let image_lru = self.image_lru.clone();
+                                if ui.is_rect_visible(rect.1)
+                                    && !self.thumbnail_cache.lock().unwrap().contains_key(&page_idx)
+                                {
                                     let archive = self.archive.clone();
                                     let cache = self.thumbnail_cache.clone();
-                                    tokio::spawn(async move {
-                                        // Use async archive/image loading here!
-                                        // e.g. let img_data = archive.lock().unwrap().read_image_by_index(page_idx).await?;
-                                        // Insert into cache when done
-                                    });
+                                    let semaphore = self.thumb_semaphore.clone();
+                                    let page_idx_copy = page_idx;
+                                    let thumb_size_copy = thumb_size;
+
+                                    // Clone the filename while holding the lock, then drop the guard before spawn
+                                    let filename = {
+                                        let archive_ref = archive.as_ref().unwrap();
+                                        let guard = archive_ref.lock().unwrap();
+                                        guard.list_images().get(page_idx_copy).cloned()
+                                    };
+
+                                    if let Some(filename) = filename {
+                                        tokio::spawn(async move {
+                                            let _permit = semaphore.acquire().await.unwrap();
+
+                                            // Lock the archive, get the image bytes synchronously, then drop the lock before .await
+                                            let img_data = {
+                                                let archive_ref = archive.as_ref().unwrap();
+                                                let mut guard = archive_ref.lock().unwrap();
+                                                guard.backend.read_image_by_name_sync(&filename)
+                                            };
+
+                                            if let Ok(img_data) = img_data {
+                                                // Detect GIF by magic bytes
+                                                let is_gif = img_data.starts_with(b"GIF87a")
+                                                    || img_data.starts_with(b"GIF89a");
+                                                let img_result = if is_gif {
+                                                    use image::AnimationDecoder;
+                                                    use image::codecs::gif::GifDecoder;
+                                                    use std::io::Cursor;
+                                                    let cursor = Cursor::new(&*img_data);
+                                                    if let Ok(decoder) = GifDecoder::new(cursor) {
+                                                        if let Ok(mut frames) =
+                                                            decoder.into_frames().collect_frames()
+                                                        {
+                                                            if let Some(frame) = frames.get(0) {
+                                                                Some(image::DynamicImage::from(
+                                                                    frame.clone().into_buffer(),
+                                                                ))
+                                                            } else {
+                                                                None
+                                                            }
+                                                        } else {
+                                                            None
+                                                        }
+                                                    } else {
+                                                        None
+                                                    }
+                                                } else {
+                                                    image::load_from_memory(&img_data).ok()
+                                                };
+
+                                                if let Some(img) = img_result {
+                                                    // Always resize to thumbnail size before caching
+                                                    let thumb = img.resize_exact(
+                                                        thumb_size_copy,
+                                                        thumb_size_copy,
+                                                        image::imageops::FilterType::Lanczos3,
+                                                    );
+                                                    let mut cache_guard = cache.lock().unwrap();
+                                                    cache_guard.insert(page_idx_copy, thumb);
+                                                }
+                                            }
+                                        });
+                                    }
                                 }
-                                if let Some(img) = self.thumbnail_cache.get(&page_idx) {
+
+                                // Always show spinner until the thumbnail is loaded
+                                if let Some(img) =
+                                    self.thumbnail_cache.lock().unwrap().get(&page_idx)
+                                {
                                     let color_img = egui::ColorImage::from_rgba_unmultiplied(
                                         [img.width() as usize, img.height() as usize],
                                         &img.to_rgba8(),
@@ -57,10 +125,15 @@ impl CBZViewerApp {
                                             .frame(false)
                                             .sense(egui::Sense::click()),
                                     );
-                                    // Draw highlight if hovered
                                     if resp.hovered() {
-                                        let stroke = egui::Stroke::new(3.0, egui::Color32::LIGHT_BLUE);
-                                        ui.painter().rect_stroke(rect.1, 6.0, stroke, egui::StrokeKind::Outside);
+                                        let stroke =
+                                            egui::Stroke::new(3.0, egui::Color32::LIGHT_BLUE);
+                                        ui.painter().rect_stroke(
+                                            rect.1,
+                                            6.0,
+                                            stroke,
+                                            egui::StrokeKind::Outside,
+                                        );
                                     }
                                     // Draw index at bottom right
                                     let index_text = format!("{}", page_idx + 1);
