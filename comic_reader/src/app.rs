@@ -4,7 +4,7 @@ use crate::{
     // archive::{self, ZipImageArchive},
     prelude::*,
 };
-use egui::{epaint::tessellator::Path, Pos2};
+use egui::{Pos2, epaint::tessellator::Path};
 use tokio::sync::Semaphore;
 
 /// The main application struct, holding all state.
@@ -288,7 +288,7 @@ impl CBZViewerApp {
             }
         }
         // Handle the async image saving outside the closure
-        /*if self.on_save_image {
+        if self.on_save_image {
             self.on_save_image = false;
             let ui_logger = self.ui_logger.clone();
             let archive = self.archive.clone();
@@ -297,7 +297,7 @@ impl CBZViewerApp {
             // Spawn a background task to avoid blocking the UI
             tokio::spawn(async move {
                 if let Some(archive_mutex) = archive {
-                    // Lock and extract the filename, then drop the guard before await
+                    // Lock and extract the filename while holding the lock
                     let filename = filenames
                         .as_ref()
                         .and_then(|f| f.get(current_page).cloned())
@@ -306,25 +306,34 @@ impl CBZViewerApp {
                     // Clone the Arc<Mutex<ImageArchive>> for use in async block
                     let archive_clone = archive_mutex.clone();
 
-                    // Lock the archive, clone what is needed, and drop the guard before await
-                    // Here, we only need to pass the filename to the async function
-                    // and reacquire the lock inside the async function if needed
+                    // Clone the filename for use after the lock is dropped
+                    let filename_clone = filename.clone();
+
+                    // Lock the archive, extract what is needed, and drop the guard before await
                     let image_data = {
-                        // Lock the archive, then drop the guard before await
-                        // We assume read_image_by_name only needs &mut self, so we reacquire the lock inside the async block
-                        // This avoids holding the MutexGuard across await
                         let mut archive_guard = archive_clone.lock().unwrap();
-                        // Call the async function and drop the guard before await
-                        let fut = archive_guard.read_image_by_name(&filename);
-                        drop(archive_guard);
-                        fut.await
+                        // Clone the data needed for the async call
+                        let filename_owned = filename_clone.clone();
+                        // Call the async function and await it while holding the lock
+                        // If possible, refactor read_image_by_name to not borrow self
+                        futures::executor::block_on(
+                            archive_guard.read_image_by_name(&filename_owned),
+                        )
                     };
 
                     if let Ok(image) = image_data {
                         let image_vec: Vec<u8> = image.into();
+
+                        use std::path::Path;
+                        let basename = Path::new(&filename)
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or(&filename);
+                        log::info!("Saving image as {}", basename);
+
                         if let Some(save_path) = rfd::FileDialog::new()
                             .set_title("Save Image")
-                            .set_file_name(&filename)
+                            .set_file_name(basename)
                             .save_file()
                         {
                             use tokio::io::AsyncWriteExt;
@@ -357,7 +366,7 @@ impl CBZViewerApp {
                     }
                 }
             });
-        }*/
+        }
     }
 
     pub fn handle_input(&mut self, ctx: &egui::Context) {

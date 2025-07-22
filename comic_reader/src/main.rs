@@ -47,7 +47,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     #[cfg(feature = "7z")]
     {
-        if check_bin("7z", "7z archives will not open.") {}
+        #[cfg(target_os = "windows")]
+        {
+            let path = PathBuf::from("C:\\Program Files\\7-Zip");
+            if path.exists() {
+                log::info!("Found 7-Zip installation at {}", path.display());
+                let path_var = std::env::var("PATH").unwrap_or_default();
+                let path_var = format!("{};{}", path_var, path.to_string_lossy());
+                log::info!("Setting PATH to: {}", path_var);
+                unsafe {
+                    std::env::set_var("PATH", path_var);
+                }
+            } else {
+                check_bin("7z", "7z archives will not open.");
+            }
+            // check_bin("7z", "7z archives will not open.");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            check_bin("7z", "7z archives will not open.");
+        }
     }
 
     let path = std::env::args().nth(1).map(PathBuf::from);
