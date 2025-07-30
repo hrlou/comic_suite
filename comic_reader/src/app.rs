@@ -240,6 +240,26 @@ impl CBZViewerApp {
         }
     }
 
+    /// Try to get the full-size image for a page from the LRU cache.
+    pub fn get_image_from_cache(&self, page_idx: usize) -> Option<image::DynamicImage> {
+        use crate::cache::image_cache::PageImage;
+
+        // Try LRU cache first
+        if let Some(entry) = self.image_lru.lock().unwrap().get(&page_idx) {
+            if let PageImage::Static(ref dyn_img) = entry.image {
+                return Some(dyn_img.clone());
+            }
+        }
+
+        // Optionally, try thumbnail cache (not full-size)
+        if let Some(thumb) = self.thumbnail_cache.lock().unwrap().get(&page_idx) {
+            return Some(thumb.clone());
+        }
+
+        // Not found in cache
+        None
+    }
+
     pub fn on_changes(&mut self) {
         // Handle goto page logic
         if self.on_goto_page {
