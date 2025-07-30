@@ -38,6 +38,10 @@ pub struct CBZViewerApp {
     pub thumb_semaphore: Arc<Semaphore>,
     pub new_page: Option<PathBuf>,
     pub show_debug_menu: bool,
+    pub slideshow_mode: bool,
+    pub slideshow_last_tick: std::time::Instant,
+    pub slideshow_interval_secs: f32,
+    pub show_slideshow_interval_popup: bool, // New field to control the popup
 }
 
 impl Default for CBZViewerApp {
@@ -72,6 +76,10 @@ impl Default for CBZViewerApp {
             thumb_semaphore: Arc::new(Semaphore::new(8)), // Limit to 8 concurrent thumbnail loads
             new_page: None,
             show_debug_menu: false,
+            slideshow_mode: false,
+            slideshow_last_tick: std::time::Instant::now(),
+            slideshow_interval_secs: 5.0, // Default slideshow interval
+            show_slideshow_interval_popup: false, // Initialize the popup control field
         }
     }
 }
@@ -346,9 +354,9 @@ impl CBZViewerApp {
 
                         use std::path::Path;
                         let basename = Path::new(&filename)
-                                    .file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or(&filename);
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&filename);
                         log::info!("Saving image as {}", basename);
 
                         if let Some(save_path) = rfd::FileDialog::new()
@@ -444,6 +452,17 @@ impl eframe::App for CBZViewerApp {
             self.display_main_empty(ctx);
         }
 
+        if self.slideshow_mode && self.total_pages > 0 {
+            let now = std::time::Instant::now();
+            if self.current_page >= self.total_pages {
+                self.current_page = 0; // Reset to first page if out of bounds
+            }
+            if now.duration_since(self.slideshow_last_tick).as_secs_f32() >= self.slideshow_interval_secs {
+                self.goto_next_page();
+                self.slideshow_last_tick = now;
+            }
+        }
+
         self.display_debug_menu(ctx);
         self.on_changes();
 
@@ -453,6 +472,23 @@ impl eframe::App for CBZViewerApp {
 
         if let Ok(mut logger) = self.ui_logger.lock() {
             logger.clear_expired();
+        }
+
+        // Show the slideshow interval settings popup if enabled
+        if self.show_slideshow_interval_popup {
+            egui::Window::new("Set Slideshow Interval")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label("Seconds per slide:");
+                    let mut interval = self.slideshow_interval_secs;
+                    if ui.add(egui::DragValue::new(&mut interval).clamp_range(1.0..=60.0)).changed() {
+                        self.slideshow_interval_secs = interval;
+                    }
+                    if ui.button("OK").clicked() {
+                        self.show_slideshow_interval_popup = false;
+                    }
+                });
         }
     }
 }

@@ -139,6 +139,16 @@ pub fn ui_navigation(app: &mut CBZViewerApp, ui: &mut Ui) {
         // app.texture_cache.clear();
     }
 
+    // --- Slideshow button ---
+    let timer_btn = ui.selectable_label(app.slideshow_mode, "\u{f017}")
+        .on_hover_text(format!("Slideshow mode ({}s)", app.slideshow_interval_secs));
+    if timer_btn.clicked() {
+        app.slideshow_mode = !app.slideshow_mode;
+    }
+    if timer_btn.secondary_clicked() {
+        app.show_slideshow_interval_popup = true;
+    }
+
     if app.double_page_mode {
         if ui
             .button("\u{f08e}")
