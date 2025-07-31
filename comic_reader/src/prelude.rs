@@ -22,6 +22,7 @@ pub use lru::LruCache;
 // crate modules
 pub use crate::{
     app::CBZViewerApp,
+    archive_view::ArchiveView,
     cache::{
         SharedImageCache,
         image_cache::{LoadedPage, PageImage},

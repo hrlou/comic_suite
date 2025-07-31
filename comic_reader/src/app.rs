@@ -42,6 +42,7 @@ pub struct CBZViewerApp {
     pub slideshow_last_tick: std::time::Instant,
     pub slideshow_interval_secs: f32,
     pub show_slideshow_interval_popup: bool, // New field to control the popup
+    pub archive_view: ArchiveView,
 }
 
 impl Default for CBZViewerApp {
@@ -80,6 +81,7 @@ impl Default for CBZViewerApp {
             slideshow_last_tick: std::time::Instant::now(),
             slideshow_interval_secs: 5.0, // Default slideshow interval
             show_slideshow_interval_popup: false, // Initialize the popup control field
+            archive_view: ArchiveView::default(),
         }
     }
 }
@@ -400,7 +402,7 @@ impl CBZViewerApp {
     pub fn handle_input(&mut self, ctx: &egui::Context) {
         // Keyboard navigation
         if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
-            self.goto_next_page();
+            self.archive_view.goto_next_page(self.double_page_mode);
         }
         if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
             self.goto_prev_page();
@@ -458,7 +460,7 @@ impl eframe::App for CBZViewerApp {
                 self.current_page = 0; // Reset to first page if out of bounds
             }
             if now.duration_since(self.slideshow_last_tick).as_secs_f32() >= self.slideshow_interval_secs {
-                self.goto_next_page();
+                self.archive_view.goto_next_page(self.double_page_mode);
                 self.slideshow_last_tick = now;
             }
         }

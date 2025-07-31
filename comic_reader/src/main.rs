@@ -8,6 +8,7 @@ mod error;
 mod macros;
 mod prelude;
 mod ui;
+mod archive_view;
 
 use crate::prelude::*;
 

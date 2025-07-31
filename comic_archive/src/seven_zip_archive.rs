@@ -3,12 +3,15 @@ use crate::is_supported_format;
 use crate::prelude::*;
 use std::fs;
 use std::io::Read;
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 use walkdir;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub struct SevenZipImageArchive {
@@ -29,9 +32,7 @@ impl SevenZipImageArchive {
             .arg(format!("-o{}", temp_dir.path().display()));
 
         #[cfg(windows)]
-        {
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
+        cmd.creation_flags(CREATE_NO_WINDOW);
 
         let status = cmd.status().map_err(|_| ArchiveError::NoImages)?;
 

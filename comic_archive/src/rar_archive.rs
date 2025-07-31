@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::tempdir;
 
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// An archive backend for RAR/CBR comic archives using the external `unrar` and `rar` tools.
@@ -18,11 +20,13 @@ pub struct RarImageArchive {
 
 impl RarImageArchive {
     pub fn new(path: &Path) -> Result<Self, ArchiveError> {
-        let output = Command::new("unrar")
-            .arg("l")
-            .arg("-c-")
-            .arg(path)
-            .creation_flags(CREATE_NO_WINDOW)
+        let mut cmd = Command::new("unrar");
+        cmd.arg("l").arg("-c-").arg(path);
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let output = cmd
             .output()
             .map_err(|_| ArchiveError::UnsupportedArchive)?;
 
@@ -69,13 +73,18 @@ impl RarImageArchive {
                 "Failed to create temp dir",
             ))
         })?;
-        let status = Command::new("unrar")
-            .arg("x")
+
+        let mut cmd = Command::new("unrar");
+        cmd.arg("x")
             .arg("-y")
             .arg(&self.path)
             .arg(filename)
-            .arg(tmp_dir.path())
-            .creation_flags(CREATE_NO_WINDOW)
+            .arg(tmp_dir.path());
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let status = cmd
             .status()
             .map_err(|_| ArchiveError::UnsupportedArchive)?;
 
@@ -95,13 +104,18 @@ impl RarImageArchive {
     fn read_manifest_string_sync(&self) -> Result<String, ArchiveError> {
         let tmp_dir =
             tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
-        let status = Command::new("unrar")
-            .arg("x")
+
+        let mut cmd = Command::new("unrar");
+        cmd.arg("x")
             .arg("-y")
             .arg(&self.path)
             .arg("manifest.toml")
-            .arg(tmp_dir.path())
-            .creation_flags(CREATE_NO_WINDOW)
+            .arg(tmp_dir.path());
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let status = cmd
             .status()
             .map_err(|_| ArchiveError::ManifestError("Failed to run unrar".into()))?;
 
@@ -174,12 +188,16 @@ impl ImageArchiveTrait for RarImageArchive {
             fs::write(&manifest_path, &toml)
                 .map_err(|_| ArchiveError::ManifestError("Failed to write temp manifest".into()))?;
 
-            let status = Command::new("rar")
-                .arg("u")
+            let mut cmd = Command::new("rar");
+            cmd.arg("u")
                 .arg("-ep1")
                 .arg(&path)
-                .arg(&manifest_path)
-                .creation_flags(CREATE_NO_WINDOW)
+                .arg(&manifest_path);
+
+            #[cfg(windows)]
+            cmd.creation_flags(CREATE_NO_WINDOW);
+
+            let status = cmd
                 .status()
                 .map_err(|_| {
                     ArchiveError::ManifestError(
@@ -222,13 +240,17 @@ impl ImageArchiveTrait for RarImageArchive {
                 "Failed to create temp dir",
             ))
         })?;
-        let status = Command::new("unrar")
-            .arg("x")
+        let mut cmd = Command::new("unrar");
+        cmd.arg("x")
             .arg("-y") // assume yes
             .arg(&self.path)
             .arg(filename)
-            .arg(tmp_dir.path())
-            .creation_flags(CREATE_NO_WINDOW)
+            .arg(tmp_dir.path());
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let status = cmd
             .status()
             .map_err(|_| ArchiveError::UnsupportedArchive)?;
 
@@ -248,13 +270,17 @@ impl ImageArchiveTrait for RarImageArchive {
     fn read_manifest_string(&self) -> Result<String, ArchiveError> {
         let tmp_dir =
             tempdir().map_err(|_| ArchiveError::ManifestError("Tempdir failed".into()))?;
-        let status = Command::new("unrar")
-            .arg("x")
+        let mut cmd = Command::new("unrar");
+        cmd.arg("x")
             .arg("-y")
             .arg(&self.path)
             .arg("manifest.toml")
-            .arg(tmp_dir.path())
-            .creation_flags(CREATE_NO_WINDOW)
+            .arg(tmp_dir.path());
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let status = cmd
             .status()
             .map_err(|_| ArchiveError::ManifestError("Failed to run unrar".into()))?;
 
@@ -318,12 +344,16 @@ impl ImageArchiveTrait for RarImageArchive {
 
         drop(tmp_dir);
 
-        let status = Command::new("rar")
-            .arg("u") // update
+        let mut cmd = Command::new("rar");
+        cmd.arg("u") // update
             .arg("-ep1") // exclude base dir from names
             .arg(&self.path)
-            .arg(&manifest_path)
-            .creation_flags(CREATE_NO_WINDOW)
+            .arg(&manifest_path);
+
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+
+        let status = cmd
             .status()
             .map_err(|_| {
                 ArchiveError::ManifestError(
